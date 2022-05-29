@@ -1,0 +1,10 @@
+{
+	"description": "NSPC player",
+	"license": "BSD 3-clause",
+	"name": "player",
+	"targetType": "executable",
+	"dependencies": {
+		"nspcplay": "*",
+		"bindbc-sdl": "~>1.0.0"
+	}
+}

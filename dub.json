@@ -1,0 +1,8 @@
+{
+	"description": "NSPC player.",
+	"license": "proprietary",
+	"name": "nspcplay",
+	"subPackages": [
+		"player"
+	]
+}
