@@ -542,7 +542,7 @@ struct NSPCPlayer {
 	}
 
 
-	void load_pattern() nothrow @system {
+	void load_pattern() nothrow @safe {
 		state.ordnum++;
 		if (state.ordnum >= cur_song.order.length) {
 			if (--state.repeat_count >= 0x80)
