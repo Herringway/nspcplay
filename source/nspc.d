@@ -93,7 +93,7 @@ struct pack {
 }
 struct block {
 	ushort size, spc_address;
-	ubyte *data; // only used for inmem packs
+	ubyte[] data; // only used for inmem packs
 }
 // note style tables, from 6F80
 immutable ubyte[8] release_table = [
@@ -867,7 +867,7 @@ struct NSPCPlayer {
 	}
 	void free_pack(pack *p) nothrow {
 		for (int i = 0; i < p.blocks.length; i++)
-			free(p.blocks[i].data);
+			free(&p.blocks[i].data[0]);
 		free(&p.blocks[0]);
 		p.status = 0;
 	}
@@ -939,7 +939,7 @@ struct NSPCPlayer {
 			block[] b = mp.blocks;
 			auto base = mp.start_address - 0xC00000;
 			for (int i = 0; i < mp.blocks.length; i++) {
-				b[i].data = cast(ubyte*)malloc(b[i].size);
+				b[i].data = (cast(ubyte*)malloc(b[i].size))[0 .. b[i].size];
 				b[i].data[0 .. b[i].size] = romData[base + 4 .. base + 4 + b[i].size];
 				base += 4 + b[i].size;
 			}
@@ -955,7 +955,7 @@ struct NSPCPlayer {
 
 		block *b = get_cur_block();
 		if (b != null) {
-			memcpy(&spc[b.spc_address], b.data, b.size);
+			memcpy(&spc[b.spc_address], &b.data[0], b.size);
 			decompile_song(&cur_song, b.spc_address, b.spc_address + b.size);
 		}
 		initialize();
