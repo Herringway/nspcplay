@@ -936,13 +936,12 @@ struct NSPCPlayer {
 			pack *rp = &rom_packs[pack_];
 			mp.start_address = rp.start_address;
 			mp.blocks = (cast(block*)memcpy(malloc(rp.blocks.length * block.sizeof), &rp.blocks[0], rp.blocks.length * block.sizeof))[0 .. rp.blocks.length];
-			block* b = &mp.blocks[0];
+			block[] b = mp.blocks;
 			auto base = mp.start_address - 0xC00000;
 			for (int i = 0; i < mp.blocks.length; i++) {
-				b.data = cast(ubyte*)malloc(b.size);
-				b.data[0 .. b.size] = romData[base + 4 .. base + 4 + b.size];
-				base += 4 + b.size;
-				b++;
+				b[i].data = cast(ubyte*)malloc(b[i].size);
+				b[i].data[0 .. b[i].size] = romData[base + 4 .. base + 4 + b[i].size];
+				base += 4 + b[i].size;
 			}
 			mp.status |= IPACK_INMEM;
 		}
