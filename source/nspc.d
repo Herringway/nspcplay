@@ -269,8 +269,7 @@ struct NSPCPlayer {
 		}
 		return true;
 	}
-	private void calc_total_vol(song_state *st, channel_state *c, byte trem_phase) nothrow @system
-	{
+	private void calc_total_vol(song_state *st, channel_state *c, byte trem_phase) nothrow @safe {
 		ubyte v = (trem_phase << 1 ^ trem_phase >> 7) & 0xFF;
 		v = ~(v * c.tremolo_range >> 8) & 0xFF;
 
@@ -944,7 +943,7 @@ struct NSPCPlayer {
 		block *b = get_cur_block();
 		if (b != null) {
 			spc[b.spc_address .. b.spc_address + b.size] = b.data[0 .. b.size];
-			decompile_song(&cur_song, b.spc_address, b.spc_address + b.size);
+			decompile_song(cur_song, b.spc_address, b.spc_address + b.size);
 		}
 		initialize();
 	}
@@ -960,39 +959,39 @@ struct NSPCPlayer {
 		}
 		select_block(bnum);
 	}
-	void decompile_song(Song *s, int start_addr, int end_addr) @system {
+	void decompile_song(ref Song song, int start_addr, int end_addr) @system {
 		ushort *sub_table;
 		int first_pattern;
 		int tracks_start;
 		int tracks_end;
 		int pat_bytes;
 		string error;
-		s.address = cast(ushort)start_addr;
-		s.changed = false;
+		song.address = cast(ushort)start_addr;
+		song.changed = false;
 
 		// Get order length and repeat info (at this point, we don't know how
 		// many patterns there are, so the pattern pointers aren't validated yet)
 		ushort[] wp = cast(ushort[])spc[start_addr .. $];
 		while (wp[0] >= 0x100) wp = wp[1 .. $];
-		s.order_length = cast(int)(&wp[0] - cast(ushort *)&spc[start_addr]);
-		if (s.order_length == 0) {
+		song.order_length = cast(int)(&wp[0] - cast(ushort *)&spc[start_addr]);
+		if (song.order_length == 0) {
 			throw new Exception("Order length is 0");
 		}
-		s.repeat = wp[0];
+		song.repeat = wp[0];
 		wp = wp[1 .. $];
-		if (s.repeat == 0) {
-			s.repeat_pos = 0;
+		if (song.repeat == 0) {
+			song.repeat_pos = 0;
 		} else {
 			int repeat_off = wp[0] - start_addr;
 			wp = wp[1 .. $];
-			if (repeat_off & 1 || repeat_off < 0 || repeat_off >= s.order_length*2) {
+			if (repeat_off & 1 || repeat_off < 0 || repeat_off >= song.order_length*2) {
 				throw new Exception(format!"Bad repeat pointer: %x"(repeat_off + start_addr));
 			}
 			if (wp[0] != 0) {
 				throw new Exception("Repeat not followed by end of song");
 			}
 			wp = wp[1 .. $];
-			s.repeat_pos = repeat_off >> 1;
+			song.repeat_pos = repeat_off >> 1;
 		}
 
 		first_pattern = cast(int)(cast(ubyte *)&wp[0] - &spc[0]);
@@ -1037,32 +1036,32 @@ struct NSPCPlayer {
 		}
 
 		// Now the number of patterns is known, so go back and get the order
-		s.order = &theAllocator.makeArray!int(s.order_length)[0];
+		song.order = &theAllocator.makeArray!int(song.order_length)[0];
 		scope(failure) {
-			theAllocator.dispose(s.order);
+			theAllocator.dispose(song.order);
 		}
 		wp = cast(ushort[])spc[start_addr .. $];
-		for (int i = 0; i < s.order_length; i++) {
+		for (int i = 0; i < song.order_length; i++) {
 			int pat = wp[0] - first_pattern;
 			wp = wp[1 .. $];
 			if (pat < 0 || pat >= pat_bytes || pat & 15) {
 				throw new Exception(format!"Bad pattern pointer: %x"(pat + first_pattern));
 			}
-			s.order[i] = pat >> 4;
+			song.order[i] = pat >> 4;
 		}
 
 		sub_table = null;
-		s.patterns = pat_bytes >> 4;
-		s.pattern = &theAllocator.makeArray!(track[8])(s.patterns)[0];
+		song.patterns = pat_bytes >> 4;
+		song.pattern = &theAllocator.makeArray!(track[8])(song.patterns)[0];
 		scope(failure) {
-			theAllocator.dispose(s.pattern);
+			theAllocator.dispose(song.pattern);
 		}
-		s.subs = 0;
-		s.sub = null;
+		song.subs = 0;
+		song.sub = null;
 
 		wp = cast(ushort[])spc[first_pattern .. $];
-		for (int trk = 0; trk < s.patterns * 8; trk++) {
-			track *t = &s.pattern[0][0] + trk;
+		for (int trk = 0; trk < song.patterns * 8; trk++) {
+			track *t = &song.pattern[0][0] + trk;
 			int start = wp[0];
 			wp = wp[1 .. $];
 			if (start == 0) continue;
@@ -1075,7 +1074,7 @@ struct NSPCPlayer {
 			// If we don't find one, then next will remain at 0x10000 and we will search until the
 			// end of memory to find a 00 byte to terminate the track.
 			int next = 0x10000; // offset of following track
-			for (int track_ind = 0; track_ind < (s.patterns * 8); track_ind += 1) {
+			for (int track_ind = 0; track_ind < (song.patterns * 8); track_ind += 1) {
 				int track_addr = (cast(ushort *)(&spc[first_pattern]))[track_ind];
 				if (track_addr < next && track_addr > start) {
 					next = track_addr;
@@ -1099,19 +1098,19 @@ struct NSPCPlayer {
 				int sub_entry;
 
 				// find existing entry in sub_table
-				for (sub_entry = 0; sub_entry < s.subs && sub_table[sub_entry] != sub_ptr; sub_entry++) {}
-				if (sub_entry == s.subs) {
+				for (sub_entry = 0; sub_entry < song.subs && sub_table[sub_entry] != sub_ptr; sub_entry++) {}
+				if (sub_entry == song.subs) {
 					// sub_entry doesn't already exist in sub_table; create it
-					sub_entry = s.subs++;
+					sub_entry = song.subs++;
 
-					sub_table = &theAllocator.makeArray!ushort(s.subs)[0];
+					sub_table = &theAllocator.makeArray!ushort(song.subs)[0];
 					scope(failure) {
 						theAllocator.dispose(sub_table);
 					}
 					sub_table[sub_entry] = cast(ushort)sub_ptr;
 
-					s.sub = cast(track*)realloc(s.sub, track.sizeof * s.subs);
-					track *st = &s.sub[sub_entry];
+					song.sub = cast(track*)realloc(song.sub, track.sizeof * song.subs);
+					track *st = &song.sub[sub_entry];
 
 					ubyte *substart = &spc[sub_ptr];
 					const(ubyte)* subend = substart;
