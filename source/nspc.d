@@ -797,8 +797,7 @@ struct NSPCPlayer {
 
 			int offset = rp.	start_address - 0xC00000;
 			if (offset >= romData.length) {
-				valid = false;
-				goto bad_pointer;
+				throw new Exception("Attempted to read past end of ROM!");
 			}
 
 			while ((size = read!ushort(romData, offset)) > 0) {
@@ -821,7 +820,6 @@ struct NSPCPlayer {
 
 				spc[spc_addr .. spc_addr + size] = romData[offset + 4 .. offset + 4 + size];
 			}
-	bad_pointer:
 			rp.blocks = blocks[0 .. count];
 			inmem_packs[i].status = 0;
 		}
