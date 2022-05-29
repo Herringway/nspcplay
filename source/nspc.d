@@ -2,60 +2,52 @@ import core.stdc.math;
 import core.stdc.stdio;
 import core.stdc.stdlib;
 import core.stdc.string;
-import core.sys.windows.windows;
-//import ebmusv2;
-//import structs;
-//import sound;
-//import main;
-//import parser;
-//import brr;
-//import tracker;
 struct song_state {
 	channel_state[16] chan;
 	byte transpose;
 	slider volume;
 	slider tempo;
 	int next_timer_tick, cycle_timer;
-	BYTE first_CA_inst; // set with FA
-	BYTE repeat_count;
+	ubyte first_CA_inst; // set with FA
+	ubyte repeat_count;
 	int ordnum;
 	int patpos; // Number of cycles since top of pattern
 }
 struct slider {
-	WORD cur, delta;
-	BYTE cycles, target;
+	ushort cur, delta;
+	ubyte cycles, target;
 }
 
 struct channel_state {
-	BYTE *ptr;
+	ubyte *ptr;
 
 	int next; // time left in note
 
-	slider note; BYTE cur_port_start_ctr;
-	BYTE note_len, note_style;
+	slider note; ubyte cur_port_start_ctr;
+	ubyte note_len, note_style;
 
-	BYTE note_release; // time to release note, in cycles
+	ubyte note_release; // time to release note, in cycles
 
 	int sub_start; // current subroutine number
-	BYTE *sub_ret; // where to return to after sub
-	BYTE sub_count; // number of loops
+	ubyte *sub_ret; // where to return to after sub
+	ubyte sub_count; // number of loops
 
-	BYTE inst; // instrument
-	BYTE inst_adsr1;
-	BYTE finetune;
+	ubyte inst; // instrument
+	ubyte inst_adsr1;
+	ubyte finetune;
 	byte transpose;
-	slider panning; BYTE pan_flags;
+	slider panning; ubyte pan_flags;
 	slider volume;
-	BYTE total_vol;
+	ubyte total_vol;
 	byte left_vol, right_vol;
 
-	BYTE port_type, port_start, port_length, port_range;
-	BYTE vibrato_start, vibrato_speed, vibrato_max_range, vibrato_fadein;
-	BYTE tremolo_start, tremolo_speed, tremolo_range;
+	ubyte port_type, port_start, port_length, port_range;
+	ubyte vibrato_start, vibrato_speed, vibrato_max_range, vibrato_fadein;
+	ubyte tremolo_start, tremolo_speed, tremolo_range;
 
-	BYTE vibrato_phase, vibrato_start_ctr, cur_vib_range;
-	BYTE vibrato_fadein_ctr, vibrato_range_delta;
-	BYTE tremolo_phase, tremolo_start_ctr;
+	ubyte vibrato_phase, vibrato_start_ctr, cur_vib_range;
+	ubyte vibrato_fadein_ctr, vibrato_range_delta;
+	ubyte tremolo_phase, tremolo_start_ctr;
 
 	sample *samp;
 	int samp_pos, note_freq;
@@ -69,17 +61,17 @@ struct sample {
 	int loop_len;
 }
 struct Parser {
-	BYTE *ptr;
-	BYTE *sub_ret;
+	ubyte *ptr;
+	ubyte *sub_ret;
 	int sub_start;
-	BYTE sub_count;
-	BYTE note_len;
+	ubyte sub_count;
+	ubyte note_len;
 }
 
 alias song = Song;
 struct Song {
-	WORD address;
-	BYTE changed;
+	ushort address;
+	ubyte changed;
 	int order_length;
 	int *order;
 	int repeat, repeat_pos;
@@ -91,7 +83,7 @@ struct Song {
 
 struct track {
 	int size;
-	BYTE *track; // NULL for inactive track
+	ubyte *track; // null for inactive track
 }
 struct pack {
 	int start_address;
@@ -100,8 +92,8 @@ struct pack {
 	block *blocks;
 }
 struct block {
-	WORD size, spc_address;
-	BYTE *data; // only used for inmem packs
+	ushort size, spc_address;
+	ubyte *data; // only used for inmem packs
 }
 struct Area { int address, pack; }
 // note style tables, from 6F80
@@ -114,11 +106,11 @@ immutable ubyte[16] volume_table = [
 ];
 
 // number of bytes following a Ex/Fx code
-immutable BYTE[32] code_length = [
+immutable ubyte[32] code_length = [
 	1, 1, 2, 3, 0, 1, 2, 1, 2, 1, 1, 3, 0, 1, 2, 3,
 	1, 3, 3, 0, 1, 3, 0, 3, 3, 3, 1, 2, 0, 0, 0, 0
 ];
-immutable DWORD[169] pack_orig_crc = [
+immutable uint[169] pack_orig_crc = [
 	0x35994B97, 0xDB04D065, 0xC13D8165, 0xEEFF028E, 0x5330392D, 0x705AEBBC,
 	0x4ED3BBAB, 0xFF11F6A1, 0x9E69B6C1, 0xBF0F580B, 0x0460DAD8, 0xD3EEC6FB,
 	0x082C8FC1, 0x5B81C947, 0xE157E6C2, 0x641EB570, 0x79C6A5D2, 0xFE892ACA,
@@ -179,13 +171,10 @@ struct NSPCPlayer {
 	int bufsize = 2205;
 	int chmask = 255;
 	int timer_speed = 500;
-	HWAVEOUT hwo;
-	BOOL song_playing;
+	bool song_playing;
 
-	//WAVEHDR[2] wh;
-	//WAVEHDR* curbuf = &wh[0];
 	int bufs_used;
-	BYTE[65536] spc;
+	ubyte[65536] spc;
 	int inst_base = 0x6E00;
 	sample[128] samp;
 	private int pat_length;
@@ -202,7 +191,7 @@ struct NSPCPlayer {
 
 	int area_count;
 	Area *areas;
-	BYTE[3] packs_loaded = [ 0xFF, 0xFF, 0xFF ];
+	ubyte[3] packs_loaded = [ 0xFF, 0xFF, 0xFF ];
 	int current_block = -1;
 
 	int selected_bgm;
@@ -230,7 +219,7 @@ struct NSPCPlayer {
 		//if (error) {
 		//    char[60] buf = 0;
 		//	sprintf(&buf[0], "waveOut device could not be opened (%d)", error);
-		//	MessageBox2(&buf[0], NULL, MB_ICONERROR);
+		//	MessageBox2(&buf[0], null, MB_ICONERROR);
 		//	return 0;
 		//}
 
@@ -248,14 +237,14 @@ struct NSPCPlayer {
 		//waveOutUnprepareHeader(hwo, &wh[1], wh[1].sizeof);
 		//waveOutClose(hwo);
 		//free(wh[0].lpData);
-		//hwo = NULL;
+		//hwo = null;
 	}
 
 	void fill_buffer(short[2][] buffer) nothrow {
 		//short[2]* bufp = cast(short[2]*)curbuf.lpData;
 		short[2]* bufp = &buffer[0];
 
-		//if (hwndTracker != NULL)
+		//if (hwndTracker != null)
 		//	tracker_scrolled();
 
 		//int bytes_left = curbuf.dwBufferLength;
@@ -332,7 +321,7 @@ struct NSPCPlayer {
 	void load_pattern_into_tracker() nothrow {
 		pat_length = 0;
 		for (int ch = 0; ch < 8; ch++) {
-			if (pattop_state.chan[ch].ptr == NULL) continue;
+			if (pattop_state.chan[ch].ptr == null) continue;
 			Parser p;
 			parser_init(&p, &pattop_state.chan[ch]);
 			do {
@@ -350,8 +339,8 @@ struct NSPCPlayer {
 		p.note_len = c.note_len;
 	}
 
-	BYTE *next_code(BYTE *p) nothrow {
-		BYTE chr = *p++;
+	ubyte *next_code(ubyte *p) nothrow {
+		ubyte chr = *p++;
 		if (chr < 0x80)
 			p += *p < 0x80;
 		else if (chr >= 0xE0)
@@ -359,14 +348,14 @@ struct NSPCPlayer {
 		return p;
 	}
 
-	BOOL parser_advance(Parser *p) nothrow {
+	bool parser_advance(Parser *p) nothrow {
 		int chr = *p.ptr;
 		if (chr == 0) {
-			if (p.sub_count == 0) return FALSE;
+			if (p.sub_count == 0) return false;
 			p.ptr = --p.sub_count ? cur_song.sub[p.sub_start].track : p.sub_ret;
 		} else if (chr == 0xEF) {
 			p.sub_ret = p.ptr + 4;
-			p.sub_start = *cast(WORD *)&p.ptr[1];
+			p.sub_start = *cast(ushort *)&p.ptr[1];
 			p.sub_count = p.ptr[3];
 			p.ptr = cur_song.sub[p.sub_start].track;
 		} else {
@@ -374,11 +363,11 @@ struct NSPCPlayer {
 				p.note_len = cast(ubyte)chr;
 			p.ptr = next_code(p.ptr);
 		}
-		return TRUE;
+		return true;
 	}
 	private void calc_total_vol(song_state *st, channel_state *c, byte trem_phase) nothrow
 	{
-		BYTE v = (trem_phase << 1 ^ trem_phase >> 7) & 0xFF;
+		ubyte v = (trem_phase << 1 ^ trem_phase >> 7) & 0xFF;
 		v = ~(v * c.tremolo_range >> 8) & 0xFF;
 
 		v = v * (st.volume.cur >> 8) >> 8;
@@ -388,12 +377,12 @@ struct NSPCPlayer {
 	}
 
 	private int calc_vol_3(channel_state *c, int pan, int flag) nothrow {
-		static const BYTE[21] pan_table = [
+		static const ubyte[21] pan_table = [
 			0x00, 0x01, 0x03, 0x07, 0x0D, 0x15, 0x1E, 0x29,
 			0x34, 0x42, 0x51, 0x5E, 0x67, 0x6E, 0x73, 0x77,
 			0x7A, 0x7C, 0x7D, 0x7E, 0x7F
 		];
-		const BYTE *ph = &pan_table[pan >> 8];
+		const ubyte *ph = &pan_table[pan >> 8];
 		int v = ph[0] + ((ph[1] - ph[0]) * (pan & 255) >> 8);
 		v = v * c.total_vol >> 8;
 		if (c.pan_flags & flag) v = -v;
@@ -425,7 +414,7 @@ struct NSPCPlayer {
 		if (inst >= 0x80)
 			inst += st.first_CA_inst - 0xCA;
 
-		BYTE *idata = &spc[inst_base + 6*inst];
+		ubyte *idata = &spc[inst_base + 6*inst];
 		if (inst < 0 || inst >= 64 || !samp[idata[0]].data ||
 			(idata[4] == 0 && idata[5] == 0))
 		{
@@ -449,7 +438,7 @@ struct NSPCPlayer {
 
 	// calculate how far to advance the sample pointer on each output sample
 	void calc_freq(channel_state *c, int note16) nothrow {
-		static const WORD[13] note_freq_table = [
+		static const ushort[13] note_freq_table = [
 			0x085F, 0x08DF, 0x0965, 0x09F4, 0x0A8C, 0x0B2C, 0x0BD6, 0x0C8B,
 			0x0D4A, 0x0E14, 0x0EEA, 0x0FCD, 0x10BE
 		];
@@ -458,7 +447,7 @@ struct NSPCPlayer {
 		if (note16 >= 0x3400)     note16 += (note16 >> 8) - 0x34;
 		else if (note16 < 0x1300) note16 += ((note16 >> 8) - 0x13) << 1;
 
-		if (cast(WORD)note16 >= 0x5400) {
+		if (cast(ushort)note16 >= 0x5400) {
 			c.note_freq = 0;
 			return;
 		}
@@ -470,7 +459,7 @@ struct NSPCPlayer {
 		freq <<= 1;
 		freq >>= 6 - octave;
 
-		BYTE *inst_freq = &spc[inst_base + 6*c.inst + 4];
+		ubyte *inst_freq = &spc[inst_base + 6*c.inst + 4];
 		freq *= (inst_freq[0] << 8 | inst_freq[1]);
 		freq >>= 8;
 		freq &= 0x3fff;
@@ -657,7 +646,7 @@ struct NSPCPlayer {
 				state.repeat_count = cast(ubyte)cur_song.repeat;
 			if (state.repeat_count == 0) {
 				state.ordnum--;
-				song_playing = FALSE;
+				song_playing = false;
 				return;
 			}
 			state.ordnum = cur_song.repeat_pos;
@@ -715,12 +704,12 @@ struct NSPCPlayer {
 	}
 
 	// $07F9 + $0625
-	private BOOL do_cycle(song_state *st) nothrow {
+	private bool do_cycle(song_state *st) nothrow {
 		int ch;
 		channel_state *c;
 		for (ch = 0; ch < 8; ch++) {
 			c = &st.chan[ch];
-			if (c.ptr == NULL) continue; //8F0
+			if (c.ptr == null) continue; //8F0
 
 			if (--c.next >= 0) {
 				CF7(c);
@@ -733,7 +722,7 @@ struct NSPCPlayer {
 							? cur_song.sub[c.sub_start].track
 							: c.sub_ret;
 					else
-						return FALSE;
+						return false;
 				} else if (*p < 0x80) {
 					c.note_len = *p;
 					if (p[1] < 0x80) {
@@ -762,7 +751,7 @@ struct NSPCPlayer {
 		slide(&st.volume);
 
 		for (c = &st.chan[0]; c != &st.chan[8]; c++) {
-			if (c.ptr == NULL) continue;
+			if (c.ptr == null) continue;
 
 			// @ 0C40
 			slide(&c.volume);
@@ -788,11 +777,11 @@ struct NSPCPlayer {
 			// 0C86: volume stuff
 			calc_vol_2(c, c.panning.cur);
 		}
-		return TRUE;
+		return true;
 	}
 
-	BOOL do_cycle_no_sound(song_state *st) nothrow {
-		BOOL ret = do_cycle(st);
+	bool do_cycle_no_sound(song_state *st) nothrow {
+		bool ret = do_cycle(st);
 		if (ret) {
 			int ch;
 			for (ch = 0; ch < 8; ch++)
@@ -812,50 +801,50 @@ struct NSPCPlayer {
 	private void do_sub_cycle(song_state *st) nothrow {
 		channel_state *c;
 		for (c = &st.chan[0]; c != &st.chan[8]; c++) {
-			if (c.ptr == NULL) continue;
+			if (c.ptr == null) continue;
 			// $0DD0
 
-			BOOL changed = FALSE;
+			bool changed = false;
 			if (c.tremolo_range && c.tremolo_start_ctr == c.tremolo_start) {
 				int p = c.tremolo_phase + sub_cycle_calc(st, c.tremolo_speed);
-				changed = TRUE;
+				changed = true;
 				calc_total_vol(st, c, cast(byte)p);
 			}
 			int pan = c.panning.cur;
 			if (c.panning.cycles) {
 				pan += sub_cycle_calc(st, c.panning.delta);
-				changed = TRUE;
+				changed = true;
 			}
 			if (changed) calc_vol_2(c, pan);
 
-			changed = FALSE;
+			changed = false;
 			int note = c.note.cur; // $0BBC
 			if (c.note.cycles && c.cur_port_start_ctr == 0) {
 				note += sub_cycle_calc(st, c.note.delta);
-				changed = TRUE;
+				changed = true;
 			}
 			if (c.cur_vib_range && c.vibrato_start_ctr == c.vibrato_start) {
 				int p = c.vibrato_phase + sub_cycle_calc(st, c.vibrato_speed);
 				note += calc_vib_disp(c, p);
-				changed = TRUE;
+				changed = true;
 			}
 			if (changed) calc_freq(c, note);
 		}
 	}
 
-	BOOL do_timer() nothrow {
+	bool do_timer() nothrow {
 		state.cycle_timer += state.tempo.cur >> 8;
 		if (state.cycle_timer >= 256) {
 			state.cycle_timer -= 256;
 			while (!do_cycle(&state)) {
 				load_pattern();
-				if (!song_playing) return FALSE;
+				if (!song_playing) return false;
 				load_pattern_into_tracker();
 			}
 		} else {
 			do_sub_cycle(&state);
 		}
-		return TRUE;
+		return true;
 	}
 
 	void initialize() nothrow {
@@ -875,7 +864,7 @@ struct NSPCPlayer {
 			load_pattern();
 		} else {
 			pattop_state = state;
-			song_playing = FALSE;
+			song_playing = false;
 		}
 	}
 	void play() {
@@ -886,7 +875,7 @@ struct NSPCPlayer {
 
 	}
 
-	BOOL open_rom(char *filename, BOOL readonly) {
+	bool open_rom(char *filename, bool readonly) {
 		import core.stdc.errno : errno;
 		import std.exception : ErrnoException;
 		FILE *f = fopen(filename, readonly ? "rb" : "r+b");
@@ -895,7 +884,7 @@ struct NSPCPlayer {
 		}
 
 		if (!close_rom())
-			return FALSE;
+			return false;
 
 		rom_size = cast(int)filelength(f);
 		rom_offset = rom_size & 0x200;
@@ -928,14 +917,14 @@ struct NSPCPlayer {
 		for (int i = 0; i < NUM_PACKS; i++) {
 			int size;
 			int count = 0;
-			DWORD crc;
-			block *blocks = NULL;
-			BOOL valid = TRUE;
+			uint crc;
+			block *blocks = null;
+			bool valid = true;
 			pack *rp = &rom_packs[i];
 
 			int offset = rp.	start_address - 0xC00000 + rom_offset;
 			if (offset < rom_offset || offset >= rom_size) {
-				valid = FALSE;
+				valid = false;
 				goto bad_pointer;
 			}
 
@@ -943,9 +932,9 @@ struct NSPCPlayer {
 			crc = ~0;
 			while ((size = fgetw(f)) > 0) {
 				int spc_addr = fgetw(f);
-				if (spc_addr + size > 0x10000) { valid = FALSE; break; }
+				if (spc_addr + size > 0x10000) { valid = false; break; }
 				offset += 4 + size;
-				if (offset > rom_size) { valid = FALSE; break; }
+				if (offset > rom_size) { valid = false; break; }
 
 				count++;
 				blocks = cast(block*)realloc(blocks, block.sizeof * count);
@@ -960,11 +949,11 @@ struct NSPCPlayer {
 				}*/
 
 				fread(&spc[spc_addr], size, 1, f);
-				crc = update_crc(crc, cast(BYTE *)&size, 2);
-				crc = update_crc(crc, cast(BYTE *)&spc_addr, 2);
+				crc = update_crc(crc, cast(ubyte *)&size, 2);
+				crc = update_crc(crc, cast(ubyte *)&spc_addr, 2);
 				crc = update_crc(crc, &spc[spc_addr], size);
 			}
-			crc = ~update_crc(crc, cast(BYTE *)&size, 2);
+			crc = ~update_crc(crc, cast(ubyte *)&size, 2);
 	bad_pointer:
 			change_range(rp.start_address, offset + 2 + 0xC00000 - rom_offset,
 				AREA_NON_SPC, i);
@@ -973,12 +962,12 @@ struct NSPCPlayer {
 			rp.blocks = blocks;
 			inmem_packs[i].status = 0;
 		}
-		return TRUE;
+		return true;
 	}
-	DWORD[256] crc_table;
+	uint[256] crc_table;
 	private void init_crc() nothrow {
 		for (int i = 0; i < 256; i++) {
-			DWORD crc = i;
+			uint crc = i;
 			for (int j = 8; j; j--)
 				if (crc & 1)
 					crc = (crc >> 1) ^ 0xEDB88320;
@@ -987,14 +976,14 @@ struct NSPCPlayer {
 			crc_table[i] = crc;
 		}
 	}
-	private DWORD update_crc(DWORD crc, BYTE *block, int size) nothrow {
+	private uint update_crc(uint crc, ubyte *block, int size) nothrow {
 		do {
 			crc = (crc >> 8) ^ crc_table[(crc ^ *block++) & 0xFF];
 		} while (--size);
 		return crc;
 	}
-	private BOOL close_rom() nothrow {
-		if (!rom) return TRUE;
+	private bool close_rom() nothrow {
+		if (!rom) return true;
 
 		int unsaved_packs = 0;
 		for (int i = 0; i < NUM_PACKS; i++)
@@ -1002,13 +991,13 @@ struct NSPCPlayer {
 				unsaved_packs++;
 
 		fclose(rom);
-		rom = NULL;
+		rom = null;
 		free(rom_filename);
-		rom_filename = NULL;
+		rom_filename = null;
 		free(areas);
 		free_samples();
 		free_song(&cur_song);
-		song_playing = FALSE;
+		song_playing = false;
 		initialize();
 		for (int i = 0; i < NUM_PACKS; i++) {
 			free(rom_packs[i].blocks);
@@ -1017,7 +1006,7 @@ struct NSPCPlayer {
 		}
 		memset(&packs_loaded[0], 0xFF, 3);
 		current_block = -1;
-		return TRUE;
+		return true;
 	}
 	void change_range(int start, int end, int from, int to) nothrow {
 		int i = 0;
@@ -1060,7 +1049,7 @@ struct NSPCPlayer {
 	void free_song(Song *s) nothrow {
 		int pat, ch, sub;
 		if (!s.order_length) return;
-		s.changed = FALSE;
+		s.changed = false;
 		free(s.order);
 		for (pat = 0; pat < s.patterns; pat++)
 			for (ch = 0; ch < 8; ch++)
@@ -1083,7 +1072,7 @@ struct NSPCPlayer {
 			samp[sn].data = null;
 		}
 	}
-	private void load_music(BYTE *packs_used, int spc_addr) nothrow {
+	private void load_music(ubyte *packs_used, int spc_addr) nothrow {
 		packs_loaded[0] = packs_used[0];
 		packs_loaded[1] = packs_used[1];
 		load_songpack(packs_used[2]);
@@ -1115,8 +1104,8 @@ struct NSPCPlayer {
 		}
 		decode_samples(&spc[0x6C00]);
 		inst_base = 0x6E00;
-		if (samp[0].data == NULL)
-			song_playing = FALSE;
+		if (samp[0].data == null)
+			song_playing = false;
 		initialize();
 	}
 	void load_songpack(int new_pack) nothrow {
@@ -1163,7 +1152,7 @@ struct NSPCPlayer {
 		free_song(&cur_song);
 
 		block *b = get_cur_block();
-		if (b != NULL) {
+		if (b != null) {
 			memcpy(&spc[b.spc_address], b.data, b.size);
 			decompile_song(&cur_song, b.spc_address, b.spc_address + b.size);
 		}
@@ -1182,20 +1171,20 @@ struct NSPCPlayer {
 		select_block(bnum);
 	}
 	void decompile_song(Song *s, int start_addr, int end_addr) nothrow {
-		WORD *sub_table;
+		ushort *sub_table;
 		int first_pattern;
 		int tracks_start;
 		int tracks_end;
 		int pat_bytes;
 		const(char)* error = &errbuf[0];
-		s.address = cast(WORD)start_addr;
-		s.changed = FALSE;
+		s.address = cast(ushort)start_addr;
+		s.changed = false;
 
 		// Get order length and repeat info (at this point, we don't know how
 		// many patterns there are, so the pattern pointers aren't validated yet)
-		WORD *wp = cast(WORD *)&spc[start_addr];
+		ushort *wp = cast(ushort *)&spc[start_addr];
 		while (*wp >= 0x100) wp++;
-		s.order_length = cast(int)(wp - cast(WORD *)&spc[start_addr]);
+		s.order_length = cast(int)(wp - cast(ushort *)&spc[start_addr]);
 		if (s.order_length == 0) {
 			error = "Order length is 0";
 			goto error1;
@@ -1216,11 +1205,11 @@ struct NSPCPlayer {
 			s.repeat_pos = repeat_off >> 1;
 		}
 
-		first_pattern = cast(int)(cast(BYTE *)wp - &spc[0]);
+		first_pattern = cast(int)(cast(ubyte *)wp - &spc[0]);
 
 		// locate first track, determine number of patterns
-		while ((cast(BYTE *)wp)+1 < &spc[end_addr] && *wp == 0) wp++;
-		if ((cast(BYTE *)wp)+1 >= &spc[end_addr]) {
+		while ((cast(ubyte *)wp)+1 < &spc[end_addr] && *wp == 0) wp++;
+		if ((cast(ubyte *)wp)+1 >= &spc[end_addr]) {
 			// no tracks in the song
 			tracks_start = end_addr - 1;
 		} else {
@@ -1233,13 +1222,13 @@ struct NSPCPlayer {
 			goto error1;
 		}
 
-		if ((cast(BYTE *)wp)+1 >= &spc[end_addr]) {
+		if ((cast(ubyte *)wp)+1 >= &spc[end_addr]) {
 			// no tracks in the song
 			tracks_end = end_addr - 1;
 		} else {
 			// find the last track
 			int tp, tpp = tracks_start;
-			while ((tp = *cast(WORD *)&spc[tpp -= 2]) == 0) {}
+			while ((tp = *cast(ushort *)&spc[tpp -= 2]) == 0) {}
 
 			if (tp < tracks_start || tp >= end_addr) {
 				sprintf(&errbuf[0], "Bad last track pointer: %x", tp);
@@ -1248,20 +1237,20 @@ struct NSPCPlayer {
 
 
 			// is the last track the first one in its pattern?
-			BOOL first = TRUE;
+			bool first = true;
 			int chan = (tpp - first_pattern) >> 1 & 7;
 			for (; chan; chan--)
-				first &= *cast(WORD *)&spc[tpp -= 2] == 0;
+				first &= *cast(ushort *)&spc[tpp -= 2] == 0;
 
-			BYTE *end = &spc[tp];
+			ubyte *end = &spc[tp];
 			while (*end) end = next_code(end);
 			end += first;
-			tracks_end = cast(WORD)(end - &spc[0]);
+			tracks_end = cast(ushort)(end - &spc[0]);
 		}
 
 		// Now the number of patterns is known, so go back and get the order
 		s.order = cast(int*)malloc(int.sizeof * s.order_length);
-		wp = cast(WORD *)&spc[start_addr];
+		wp = cast(ushort *)&spc[start_addr];
 		for (int i = 0; i < s.order_length; i++) {
 			int pat = *wp++ - first_pattern;
 			if (pat < 0 || pat >= pat_bytes || pat & 15) {
@@ -1271,13 +1260,13 @@ struct NSPCPlayer {
 			s.order[i] = pat >> 4;
 		}
 
-		sub_table = NULL;
+		sub_table = null;
 		s.patterns = pat_bytes >> 4;
 		s.pattern = cast(track[8]*)calloc((*s.pattern).sizeof, s.patterns);
 		s.subs = 0;
-		s.sub = NULL;
+		s.sub = null;
 
-		wp = cast(WORD *)&spc[first_pattern];
+		wp = cast(ushort *)&spc[first_pattern];
 		for (int trk = 0; trk < s.patterns * 8; trk++) {
 			track *t = &s.pattern[0][0] + trk;
 			int start = *wp++;
@@ -1293,22 +1282,22 @@ struct NSPCPlayer {
 			// end of memory to find a 00 byte to terminate the track.
 			int next = 0x10000; // offset of following track
 			for (int track_ind = 0; track_ind < (s.patterns * 8); track_ind += 1) {
-				int track_addr = (cast(WORD *)(&spc[first_pattern]))[track_ind];
+				int track_addr = (cast(ushort *)(&spc[first_pattern]))[track_ind];
 				if (track_addr < next && track_addr > start) {
 					next = track_addr;
 				}
 			}
 			// Determine the end of the track.
-			BYTE *track_end;
+			ubyte *track_end;
 			for (track_end = &spc[start]; track_end < &spc.ptr[next] && *track_end != 0; track_end = next_code(track_end)) {}
 
 			t.size = cast(int)((track_end - &spc[0]) - start);
 			t.track = cast(ubyte*)memcpy(malloc(t.size + 1), &spc[start], t.size);
 			t.track[t.size] = 0;
 
-			for (BYTE *p = t.track; p < t.track + t.size; p = next_code(p)) {
+			for (ubyte *p = t.track; p < t.track + t.size; p = next_code(p)) {
 				if (*p != 0xEF) continue;
-				int sub_ptr = *cast(WORD *)(p + 1);
+				int sub_ptr = *cast(ushort *)(p + 1);
 				int sub_entry;
 
 				// find existing entry in sub_table
@@ -1317,26 +1306,26 @@ struct NSPCPlayer {
 					// sub_entry doesn't already exist in sub_table; create it
 					sub_entry = s.subs++;
 
-					sub_table = cast(WORD*)realloc(sub_table, WORD.sizeof * s.subs);
-					sub_table[sub_entry] = cast(WORD)sub_ptr;
+					sub_table = cast(ushort*)realloc(sub_table, ushort.sizeof * s.subs);
+					sub_table[sub_entry] = cast(ushort)sub_ptr;
 
 					s.sub = cast(track*)realloc(s.sub, track.sizeof * s.subs);
 					track *st = &s.sub[sub_entry];
 
-					BYTE *substart = &spc[sub_ptr];
-					BYTE *subend = substart;
+					ubyte *substart = &spc[sub_ptr];
+					ubyte *subend = substart;
 					while (*subend != 0) subend = next_code(subend);
 					st.size = cast(int)(subend - substart);
 					st.track = cast(ubyte*)memcpy(malloc(st.size + 1), substart, st.size + 1);
-					const(char)* e = internal_validate_track(st.track, st.size, TRUE);
+					const(char)* e = internal_validate_track(st.track, st.size, true);
 					if (e) {
 						error = e;
 						goto error3;
 					}
 				}
-				*cast(WORD *)(p + 1) = cast(WORD)sub_entry;
+				*cast(ushort *)(p + 1) = cast(ushort)sub_entry;
 			}
-			const(char)* e = internal_validate_track(t.track, t.size, FALSE);
+			const(char)* e = internal_validate_track(t.track, t.size, false);
 			if (e) {
 				error = e;
 				goto error3;
@@ -1458,7 +1447,7 @@ struct NSPCPlayer {
 			*p = sa.loop_len != 0 ? sa.data[sa.length - sa.loop_len] : 0;
 		}
 	}
-	const(char)* internal_validate_track(BYTE *data, int size, BOOL is_sub) nothrow return {
+	const(char)* internal_validate_track(ubyte *data, int size, bool is_sub) nothrow return {
 		for (int pos = 0; pos < size; ) {
 			int byte_ = data[pos];
 			int next = pos + 1;
@@ -1482,7 +1471,7 @@ struct NSPCPlayer {
 
 				if (byte_ == 0xEF) {
 					if (is_sub) return "Can't call sub from within a sub";
-					int sub = *cast(WORD *)&data[pos+1];
+					int sub = *cast(ushort *)&data[pos+1];
 					if (sub >= cur_song.subs) {
 						sprintf(&errbuf[0], "Subroutine %d not present", sub);
 						return &errbuf[0];
@@ -1493,7 +1482,7 @@ struct NSPCPlayer {
 
 			pos = next;
 		}
-		return NULL;
+		return null;
 	}
 
 	block *get_cur_block() nothrow {
@@ -1502,7 +1491,7 @@ struct NSPCPlayer {
 			if (current_block >= 0 && current_block < p.block_count)
 				return &p.blocks[current_block];
 		}
-		return NULL;
+		return null;
 	}
 }
 
