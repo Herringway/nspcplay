@@ -89,8 +89,7 @@ struct track {
 struct pack {
 	int start_address;
 	int status;	// See constants above
-	int block_count;
-	block *blocks;
+	block[] blocks;
 }
 struct block {
 	ushort size, spc_address;
@@ -846,8 +845,7 @@ struct NSPCPlayer {
 				spc[spc_addr .. spc_addr + size] = romData[offset + 4 .. offset + 4 + size];
 			}
 	bad_pointer:
-			rp.block_count = count;
-			rp.blocks = blocks;
+			rp.blocks = blocks[0 .. count];
 			inmem_packs[i].status = 0;
 		}
 		return true;
@@ -868,9 +866,9 @@ struct NSPCPlayer {
 		s.order_length = 0;
 	}
 	void free_pack(pack *p) nothrow {
-		for (int i = 0; i < p.block_count; i++)
+		for (int i = 0; i < p.blocks.length; i++)
 			free(p.blocks[i].data);
-		free(p.blocks);
+		free(&p.blocks[0]);
 		p.status = 0;
 	}
 	void free_samples() nothrow {
@@ -937,12 +935,10 @@ struct NSPCPlayer {
 		if (!(mp.status & IPACK_INMEM)) {
 			pack *rp = &rom_packs[pack_];
 			mp.start_address = rp.start_address;
-			mp.block_count = rp.block_count;
-			mp.blocks = cast(block*)memcpy(malloc(mp.block_count * block.sizeof),
-				rp.blocks, mp.block_count * block.sizeof);
-			block *b = mp.blocks;
+			mp.blocks = (cast(block*)memcpy(malloc(rp.blocks.length * block.sizeof), &rp.blocks[0], rp.blocks.length * block.sizeof))[0 .. rp.blocks.length];
+			block* b = &mp.blocks[0];
 			auto base = mp.start_address - 0xC00000;
-			for (int i = 0; i < mp.block_count; i++) {
+			for (int i = 0; i < mp.blocks.length; i++) {
 				b.data = cast(ubyte*)malloc(b.size);
 				b.data[0 .. b.size] = romData[base + 4 .. base + 4 + b.size];
 				base += 4 + b.size;
@@ -970,7 +966,7 @@ struct NSPCPlayer {
 		int bnum = -1;
 		if (packs_loaded[2] < NUM_PACKS) {
 			pack *p = &inmem_packs[packs_loaded[2]];
-			for (bnum = p.block_count - 1; bnum >= 0; bnum--) {
+			for (bnum = cast(int)p.blocks.length - 1; bnum >= 0; bnum--) {
 				block *b = &p.blocks[bnum];
 				if (cast(uint)(spc_addr - b.spc_address) < b.size) break;
 			}
@@ -1293,7 +1289,7 @@ struct NSPCPlayer {
 	block *get_cur_block() nothrow {
 		if (packs_loaded[2] < NUM_PACKS) {
 			pack *p = &inmem_packs[packs_loaded[2]];
-			if (current_block >= 0 && current_block < p.block_count)
+			if (current_block >= 0 && current_block < p.blocks.length)
 				return &p.blocks[current_block];
 		}
 		return null;
