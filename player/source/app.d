@@ -60,7 +60,7 @@ int main(string[] args) {
 	trace("Loading NSPC file");
 	// Load file
 	//nspc.loadSong(file);
-	nspc.open_rom(cast(char*)filePath.toStringz, 1);
+	nspc.open_rom(file);
 
 	// Prepare to play music
 	if (!initAudio(&_sampling_func, channels, sampleRate, &nspc)) {

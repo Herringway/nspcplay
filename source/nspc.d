@@ -179,10 +179,7 @@ struct NSPCPlayer {
 	sample[128] samp;
 	private int pat_length;
 
-	FILE *rom;
-	int rom_size;
-	int rom_offset;
-	char *rom_filename;
+	const(ubyte)[] romData;
 
 	ubyte[3][NUM_SONGS] pack_used;
 	ushort[NUM_SONGS] song_address;
@@ -826,37 +823,25 @@ struct NSPCPlayer {
 
 	}
 
-	bool open_rom(char *filename, bool readonly) {
-		import core.stdc.errno : errno;
-		import std.exception : ErrnoException;
-		FILE *f = fopen(filename, readonly ? "rb" : "r+b");
-		if (!f) {
-			throw new ErrnoException("Can't open file", errno);
-		}
-
-		rom_size = cast(int)filelength(f);
-		rom_offset = rom_size & 0x200;
-		if (rom_size < 0x300000) {
+	bool open_rom(const(ubyte)[] data) {
+		romData = data;
+		if (romData.length < 0x300000) {
 			assert(0, "An EarthBound ROM must be at least 3 MB");
 		}
-		rom = f;
 
-		char *bfile = skip_dirname(filename);
-		char *title = cast(char*)malloc("EarthBound Music Editor".length + 3 + strlen(bfile));
-		sprintf(title, "%s - %s", bfile, "EarthBound Music Editor".ptr);
-		free(title);
-
-		fseek(f, BGM_PACK_TABLE + rom_offset, SEEK_SET);
-		fread(&pack_used[0][0], NUM_SONGS, 3, f);
+		pack_used = read!(typeof(pack_used))(romData, BGM_PACK_TABLE);
+		static align(1) struct PackPtr {
+			align(1):
+			ubyte bank;
+			ushort nearAddr;
+		}
+		auto packs = read!(PackPtr[NUM_PACKS])(romData, BGM_PACK_TABLE + pack_used.sizeof);
 		// pack pointer table follows immediately after
 		for (int i = 0; i < NUM_PACKS; i++) {
-			int addr = fgetc(f) << 16;
-			addr |= fgetw(f);
-			rom_packs[i].start_address = addr;
+			rom_packs[i].start_address = (packs[i].bank << 16) + packs[i].nearAddr;
 		}
 
-		fseek(f, SONG_POINTER_TABLE + rom_offset, SEEK_SET);
-		fread(&song_address[0], NUM_SONGS, 2, f);
+		song_address = read!(typeof(song_address))(romData, SONG_POINTER_TABLE);
 
 		init_crc();
 		for (int i = 0; i < NUM_PACKS; i++) {
@@ -867,19 +852,18 @@ struct NSPCPlayer {
 			bool valid = true;
 			pack *rp = &rom_packs[i];
 
-			int offset = rp.	start_address - 0xC00000 + rom_offset;
-			if (offset < rom_offset || offset >= rom_size) {
+			int offset = rp.	start_address - 0xC00000;
+			if (offset >= romData.length) {
 				valid = false;
 				goto bad_pointer;
 			}
 
-			fseek(f, offset, SEEK_SET);
 			crc = ~0;
-			while ((size = fgetw(f)) > 0) {
-				int spc_addr = fgetw(f);
+			while ((size = read!ushort(romData, offset)) > 0) {
+				int spc_addr = read!ushort(romData, offset + 2);
 				if (spc_addr + size > 0x10000) { valid = false; break; }
 				offset += 4 + size;
-				if (offset > rom_size) { valid = false; break; }
+				if (offset > romData.length) { valid = false; break; }
 
 				count++;
 				blocks = cast(block*)realloc(blocks, block.sizeof * count);
@@ -893,7 +877,7 @@ struct NSPCPlayer {
 					fseek(f, back, SEEK_SET);
 				}*/
 
-				fread(&spc[spc_addr], size, 1, f);
+				spc[spc_addr .. spc_addr + size] = romData[offset + 4 .. offset + 4 + size];
 				crc = update_crc(crc, cast(ubyte *)&size, 2);
 				crc = update_crc(crc, cast(ubyte *)&spc_addr, 2);
 				crc = update_crc(crc, &spc[spc_addr], size);
@@ -972,13 +956,14 @@ struct NSPCPlayer {
 			int p = packs_loaded[i];
 			if (p >= NUM_PACKS) continue;
 			int addr, size;
-			fseek(rom, rom_packs[p].start_address - 0xC00000 + rom_offset, 0);
-			while ((size = fgetw(rom)) != 0) {
-				addr = fgetw(rom);
+			auto base = rom_packs[p].start_address - 0xC00000;
+			while ((size = (cast(ushort[])(romData[base .. base + 2]))[0]) != 0) {
+				addr = (cast(ushort[])(romData[base + 2 .. base + 4]))[0];
 				if (size + addr >= 0x10000) {
 					assert(0, "Invalid SPC block");
 				}
-				fread(&spc[addr], size, 1, rom);
+				spc[addr .. addr + size] = romData[base + 4 .. base + 4 + size];
+				base += size + 4;
 			}
 		}
 		decode_samples(&spc[0x6C00]);
@@ -1013,11 +998,11 @@ struct NSPCPlayer {
 			mp.blocks = cast(block*)memcpy(malloc(mp.block_count * block.sizeof),
 				rp.blocks, mp.block_count * block.sizeof);
 			block *b = mp.blocks;
-			fseek(rom, mp.start_address - 0xC00000 + rom_offset, SEEK_SET);
+			auto base = mp.start_address - 0xC00000;
 			for (int i = 0; i < mp.block_count; i++) {
-				fseek(rom, 4, SEEK_CUR);
 				b.data = cast(ubyte*)malloc(b.size);
-				fread(b.data, b.size, 1, rom);
+				b.data[0 .. b.size] = romData[base + 4 .. base + 4 + b.size];
+				base += 4 + b.size;
 				b++;
 			}
 			mp.status |= IPACK_INMEM;
@@ -1482,4 +1467,8 @@ static int get_full_loop_len(const sample *sa, const short *next_block, int firs
 		return sa.length - loop_start;
 	else
 		return -1;
+}
+
+T read(T)(const(ubyte)[] data, size_t offset) {
+	return (cast(const(T)[])(data[offset .. offset + T.sizeof]))[0];
 }
