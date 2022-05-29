@@ -76,12 +76,12 @@ struct Song {
 	ubyte changed;
 	int[] order;
 	int repeat, repeat_pos;
-	track[8][] pattern;
+	Track[8][] pattern;
 	int subs;
-	track *sub;
+	Track *sub;
 }
 
-struct track {
+struct Track {
 	int size;
 	ubyte *track; // null for inactive track
 }
@@ -1044,13 +1044,13 @@ struct NSPCPlayer {
 		}
 
 		sub_table = null;
-		song.pattern = new track[8][](pat_bytes >> 4);
+		song.pattern = new Track[8][](pat_bytes >> 4);
 		song.subs = 0;
 		song.sub = null;
 
 		wp = cast(ushort[])spc[first_pattern .. $];
 		for (int trk = 0; trk < song.pattern.length * 8; trk++) {
-			track *t = &song.pattern[0][0] + trk;
+			Track *t = &song.pattern[0][0] + trk;
 			int start = wp[0];
 			wp = wp[1 .. $];
 			if (start == 0) continue;
@@ -1098,8 +1098,8 @@ struct NSPCPlayer {
 					}
 					sub_table[sub_entry] = cast(ushort)sub_ptr;
 
-					song.sub = cast(track*)realloc(song.sub, track.sizeof * song.subs);
-					track *st = &song.sub[sub_entry];
+					song.sub = cast(Track*)realloc(song.sub, Track.sizeof * song.subs);
+					Track *st = &song.sub[sub_entry];
 
 					ubyte *substart = &spc[sub_ptr];
 					const(ubyte)* subend = substart;
