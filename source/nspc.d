@@ -1,5 +1,4 @@
 import core.stdc.math;
-import core.stdc.stdio;
 import core.stdc.stdlib;
 import core.stdc.string;
 import std.format;
@@ -184,9 +183,7 @@ struct NSPCPlayer {
 
 				Sample *s = c.samp;
 				if (ipos > s.length) {
-					printf("This can't happen. %d > %d\n", ipos, s.length);
-					c.samp_pos = -1;
-					continue;
+					assert(0, format!"Sample position exceeds sample length! %d > %d"(ipos, s.length));
 				}
 
 				if (c.note_release != 0) {
@@ -318,8 +315,7 @@ struct NSPCPlayer {
 		if (inst < 0 || inst >= 64 || !samp[idata[0]].data ||
 			(idata[4] == 0 && idata[5] == 0))
 		{
-			printf("ch %lld: bad inst %X\n", c - &st.chan[0], inst);
-			return;
+			assert(0, format!"ch %s: bad inst %X"(c - &st.chan[0], inst));
 		}
 
 		c.inst = cast(ubyte)inst;
@@ -1077,7 +1073,7 @@ struct NSPCPlayer {
 			scope(failure) {
 				theAllocator.dispose(t.track);
 			}
-			memcpy(t.track, &spc[start], t.size);
+			t.track[0 .. t.size] = spc[start .. start + t.size];
 			t.track[t.size] = 0;
 
 			for (const(ubyte)* p = t.track; p < t.track + t.size; p = next_code(p)) {
@@ -1108,7 +1104,7 @@ struct NSPCPlayer {
 					scope(failure) {
 						theAllocator.dispose(st.track);
 					}
-					memcpy(st.track, substart, st.size + 1);
+					st.track[0 .. st.size + 1] = substart[0 .. st.size + 1];
 					internal_validate_track(st.track[0 .. st.size], true);
 				}
 				*cast(ushort *)(p + 1) = cast(ushort)sub_entry;
