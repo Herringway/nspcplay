@@ -2,6 +2,7 @@ import core.stdc.math;
 import core.stdc.stdio;
 import core.stdc.stdlib;
 import core.stdc.string;
+import std.format;
 struct song_state {
 	channel_state[16] chan;
 	byte transpose;
@@ -95,7 +96,6 @@ struct block {
 	ushort size, spc_address;
 	ubyte *data; // only used for inmem packs
 }
-struct Area { int address, pack; }
 // note style tables, from 6F80
 immutable ubyte[8] release_table = [
 	0x33, 0x66, 0x7f, 0x99, 0xb2, 0xcc, 0xe5, 0xfc
@@ -190,70 +190,21 @@ struct NSPCPlayer {
 	pack[NUM_PACKS] inmem_packs;
 
 	int area_count;
-	Area *areas;
 	ubyte[3] packs_loaded = [ 0xFF, 0xFF, 0xFF ];
 	int current_block = -1;
 
 	int selected_bgm;
 
 	char[60] errbuf;
-	const(char)* decomp_error;
-
-	int sound_init() nothrow {
-		//WAVEFORMATEX wfx;
-
-		//if (hwo) {
-		//	printf("Already playing!\n");
-		//	return 0;
-		//}
-
-		//wfx.wFormatTag = WAVE_FORMAT_PCM;
-		//wfx.nChannels = 2;
-		//wfx.nSamplesPerSec = mixrate;
-		//wfx.nAvgBytesPerSec = mixrate*4;
-		//wfx.nBlockAlign = 4;
-		//wfx.wBitsPerSample = 16;
-		//wfx.cbSize = wfx.sizeof;
-
-		//int error = waveOutOpen(&hwo, WAVE_MAPPER, &wfx, cast(DWORD_PTR)hwndMain, 0, CALLBACK_WINDOW);
-		//if (error) {
-		//    char[60] buf = 0;
-		//	sprintf(&buf[0], "waveOut device could not be opened (%d)", error);
-		//	MessageBox2(&buf[0], null, MB_ICONERROR);
-		//	return 0;
-		//}
-
-		//wh[0].lpData = cast(char*)malloc(bufsize*4 * 2);
-		//wh[0].dwBufferLength = bufsize*4;
-		//wh[1].lpData = wh[0].lpData + bufsize*4;
-		//wh[1].dwBufferLength = bufsize*4;
-		//waveOutPrepareHeader(hwo, &wh[0], wh[0].sizeof);
-		//waveOutPrepareHeader(hwo, &wh[1], wh[1].sizeof);
-		return 1;
-	}
-
-	void sound_uninit() nothrow {
-		//waveOutUnprepareHeader(hwo, &wh[0], wh[0].sizeof);
-		//waveOutUnprepareHeader(hwo, &wh[1], wh[1].sizeof);
-		//waveOutClose(hwo);
-		//free(wh[0].lpData);
-		//hwo = null;
-	}
+	string decomp_error;
 
 	void fill_buffer(short[2][] buffer) nothrow {
-		//short[2]* bufp = cast(short[2]*)curbuf.lpData;
 		short[2]* bufp = &buffer[0];
-
-		//if (hwndTracker != null)
-		//	tracker_scrolled();
-
-		//int bytes_left = curbuf.dwBufferLength;
 		int bytes_left = cast(int)(buffer.length * 2 * short.sizeof);
 		while (bytes_left > 0) {
 			if ((state.next_timer_tick -= timer_speed) < 0) {
 				state.next_timer_tick += mixrate;
 				if (!do_timer()) {
-					//curbuf.dwBufferLength -= bytes_left;
 					break;
 				}
 			}
@@ -883,18 +834,12 @@ struct NSPCPlayer {
 			throw new ErrnoException("Can't open file", errno);
 		}
 
-		if (!close_rom())
-			return false;
-
 		rom_size = cast(int)filelength(f);
 		rom_offset = rom_size & 0x200;
 		if (rom_size < 0x300000) {
 			assert(0, "An EarthBound ROM must be at least 3 MB");
 		}
 		rom = f;
-
-		init_areas();
-		change_range(0xBFFE00 + rom_offset, 0xBFFC00 + rom_offset + rom_size, AREA_NOT_IN_FILE, AREA_NON_SPC);
 
 		char *bfile = skip_dirname(filename);
 		char *title = cast(char*)malloc("EarthBound Music Editor".length + 3 + strlen(bfile));
@@ -955,8 +900,6 @@ struct NSPCPlayer {
 			}
 			crc = ~update_crc(crc, cast(ubyte *)&size, 2);
 	bad_pointer:
-			change_range(rp.start_address, offset + 2 + 0xC00000 - rom_offset,
-				AREA_NON_SPC, i);
 			rp.status = valid ? crc != pack_orig_crc[i] : 2;
 			rp.block_count = count;
 			rp.blocks = blocks;
@@ -981,69 +924,6 @@ struct NSPCPlayer {
 			crc = (crc >> 8) ^ crc_table[(crc ^ *block++) & 0xFF];
 		} while (--size);
 		return crc;
-	}
-	private bool close_rom() nothrow {
-		if (!rom) return true;
-
-		int unsaved_packs = 0;
-		for (int i = 0; i < NUM_PACKS; i++)
-			if (inmem_packs[i].status & IPACK_CHANGED)
-				unsaved_packs++;
-
-		fclose(rom);
-		rom = null;
-		free(rom_filename);
-		rom_filename = null;
-		free(areas);
-		free_samples();
-		free_song(&cur_song);
-		song_playing = false;
-		initialize();
-		for (int i = 0; i < NUM_PACKS; i++) {
-			free(rom_packs[i].blocks);
-			if (inmem_packs[i].status & IPACK_INMEM)
-				free_pack(&inmem_packs[i]);
-		}
-		memset(&packs_loaded[0], 0xFF, 3);
-		current_block = -1;
-		return true;
-	}
-	void change_range(int start, int end, int from, int to) nothrow {
-		int i = 0;
-
-		while (areas[i].address < start) i++;
-		if (areas[i].address != start && areas[i-1].pack == from)
-			split_area(i, start);
-
-		while (areas[i].address < end) {
-			if (areas[i+1].address > end)
-				split_area(i+1, end);
-
-			if (areas[i].pack == from) {
-				areas[i].pack = to;
-				if (areas[i-1].pack == to) {
-					memmove(&areas[i], &areas[i+1], (--area_count - i) * Area.sizeof);
-					i--;
-				}
-				if (areas[i+1].pack == to) {
-					memmove(&areas[i+1], &areas[i+2], (--area_count - (i + 1)) * Area.sizeof);
-				}
-			}
-			i++;
-		}
-	}
-	void init_areas() nothrow {
-		area_count = 2;
-		areas = cast(Area*)malloc(Area.sizeof * 2);
-		areas[0].address = -2147483647 - 1;	// -1 so compilers like Visual Studio won't interpret the - as a unary operator
-		areas[0].pack = AREA_NOT_IN_FILE;
-		areas[1].address = 2147483647;
-		areas[1].pack = AREA_END;
-	}
-	private void split_area(int i, int address) nothrow {
-		Area *a = cast(Area*)array_insert(cast(void**)&areas, &area_count, Area.sizeof, i);
-		a.address = address;
-		a.pack = (a-1).pack;
 	}
 
 	void free_song(Song *s) nothrow {
@@ -1072,7 +952,7 @@ struct NSPCPlayer {
 			samp[sn].data = null;
 		}
 	}
-	private void load_music(ubyte *packs_used, int spc_addr) nothrow {
+	private void load_music(ubyte *packs_used, int spc_addr) {
 		packs_loaded[0] = packs_used[0];
 		packs_loaded[1] = packs_used[1];
 		load_songpack(packs_used[2]);
@@ -1080,9 +960,8 @@ struct NSPCPlayer {
 		load_instruments();
 	}
 
-	private void song_selected(int index) nothrow {
+	private void song_selected(int index) {
 		selected_bgm = index;
-		//show_bgm_info();
 		load_music(&pack_used[index][0], song_address[index]);
 	}
 
@@ -1146,7 +1025,7 @@ struct NSPCPlayer {
 
 		return mp;
 	}
-	void select_block(int block_) nothrow {
+	void select_block(int block_) {
 		current_block = block_;
 
 		free_song(&cur_song);
@@ -1159,7 +1038,7 @@ struct NSPCPlayer {
 		initialize();
 	}
 
-	void select_block_by_address(int spc_addr) nothrow {
+	void select_block_by_address(int spc_addr) {
 		int bnum = -1;
 		if (packs_loaded[2] < NUM_PACKS) {
 			pack *p = &inmem_packs[packs_loaded[2]];
@@ -1170,13 +1049,13 @@ struct NSPCPlayer {
 		}
 		select_block(bnum);
 	}
-	void decompile_song(Song *s, int start_addr, int end_addr) nothrow {
+	void decompile_song(Song *s, int start_addr, int end_addr) {
 		ushort *sub_table;
 		int first_pattern;
 		int tracks_start;
 		int tracks_end;
 		int pat_bytes;
-		const(char)* error = &errbuf[0];
+		string error;
 		s.address = cast(ushort)start_addr;
 		s.changed = false;
 
@@ -1317,7 +1196,7 @@ struct NSPCPlayer {
 					while (*subend != 0) subend = next_code(subend);
 					st.size = cast(int)(subend - substart);
 					st.track = cast(ubyte*)memcpy(malloc(st.size + 1), substart, st.size + 1);
-					const(char)* e = internal_validate_track(st.track, st.size, true);
+					string e = internal_validate_track(st.track, st.size, true);
 					if (e) {
 						error = e;
 						goto error3;
@@ -1325,7 +1204,7 @@ struct NSPCPlayer {
 				}
 				*cast(ushort *)(p + 1) = cast(ushort)sub_entry;
 			}
-			const(char)* e = internal_validate_track(t.track, t.size, false);
+			string e = internal_validate_track(t.track, t.size, false);
 			if (e) {
 				error = e;
 				goto error3;
@@ -1348,8 +1227,7 @@ struct NSPCPlayer {
 	error1:
 		s.order_length = 0;
 		decomp_error = error;
-		printf("Can't decompile: %s\n", error);
-		return;
+		throw new Exception("Can't decompile: "~error);
 	}
 	void decode_samples(const(ubyte)* ptrtable) nothrow {
 		for (uint sn = 0; sn < 128; sn++) {
@@ -1447,7 +1325,7 @@ struct NSPCPlayer {
 			*p = sa.loop_len != 0 ? sa.data[sa.length - sa.loop_len] : 0;
 		}
 	}
-	const(char)* internal_validate_track(ubyte *data, int size, bool is_sub) nothrow return {
+	string internal_validate_track(ubyte *data, int size, bool is_sub)  {
 		for (int pos = 0; pos < size; ) {
 			int byte_ = data[pos];
 			int next = pos + 1;
@@ -1460,21 +1338,20 @@ struct NSPCPlayer {
 				if (byte_ == 0xFF) return "Invalid code [FF]";
 				next += code_length.ptr[byte_ - 0xE0];
 				if (next > size) {
-					char *p = strcpy(&errbuf[0], "Incomplete code: [") + 18;
-					for (; pos < size; pos++)
-						p += sprintf(p, "%02X ", data[pos]);
-					for (; pos < next; pos++)
-						p += sprintf(p, "?? ");
-					p[-1] = ']';
-					return &errbuf[0];
+					//char *p = strcpy(&errbuf[0], "Incomplete code: [") + 18;
+					//for (; pos < size; pos++)
+					//	p += sprintf(p, "%02X ", data[pos]);
+					//for (; pos < next; pos++)
+					//	p += sprintf(p, "?? ");
+					//p[-1] = ']';
+					return format!"Incomplete code: [%(%02X %)]"(data[pos .. pos + size]);
 				}
 
 				if (byte_ == 0xEF) {
 					if (is_sub) return "Can't call sub from within a sub";
 					int sub = *cast(ushort *)&data[pos+1];
 					if (sub >= cur_song.subs) {
-						sprintf(&errbuf[0], "Subroutine %d not present", sub);
-						return &errbuf[0];
+						return format!"Subroutine %d not present"(sub);
 					}
 					if (data[pos+3] == 0) return "Subroutine loop count can not be 0";
 				}

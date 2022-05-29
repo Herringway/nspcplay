@@ -54,7 +54,6 @@ int main(string[] args) {
 
 	NSPCPlayer nspc;
 	// initialization
-	nspc.sound_init();
 	trace("Initializing NSPC");
 	nspc.initialize();
 
