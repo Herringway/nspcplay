@@ -1128,7 +1128,7 @@ struct NSPCPlayer {
 			if (start == 0 || start == 0xffff)
 				continue;
 
-			int length = sample_length(&spc[0], cast(ushort)start);
+			int length = sample_length(spc, cast(ushort)start);
 			if (length == -1)
 				continue;
 
@@ -1162,7 +1162,7 @@ struct NSPCPlayer {
 				needs_another_loop = false;
 
 				for (int pos = decoding_start; pos < end; pos += BRR_BLOCK_SIZE) {
-					decode_brr_block(p, &spc[pos], !!first_block);
+					decode_brr_block(p[0 .. 16], [p[-2],p[-1]], spc[pos .. pos + BRR_BLOCK_SIZE], !!first_block);
 					p += 16;
 					first_block = false;
 				}
@@ -1174,8 +1174,8 @@ struct NSPCPlayer {
 					after_loop[0] = p[-2];
 					after_loop[1] = p[-1];
 
-					decode_brr_block(&after_loop[2], &spc[loop], false);
-					int full_loop_len = get_full_loop_len(sa, &after_loop[2], (loop - start) / BRR_BLOCK_SIZE * 16);
+					decode_brr_block(after_loop[2 .. 18], after_loop[0 .. 2], spc[loop .. loop + BRR_BLOCK_SIZE], false);
+					int full_loop_len = get_full_loop_len(*sa, after_loop[2 .. 4], (loop - start) / BRR_BLOCK_SIZE * 16);
 
 					if (full_loop_len == -1) {
 						needs_another_loop = true;
@@ -1259,7 +1259,7 @@ struct NSPCPlayer {
 	}
 }
 
-private void decode_brr_block(short *buffer, const ubyte *block, bool first_block) nothrow @system {
+private void decode_brr_block(short[] buffer, short[2] initial, const ubyte[] block, bool first_block) nothrow @safe {
 	int range = block[0] >> 4;
 	int filter = (block[0] >> 2) & 3;
 
@@ -1269,7 +1269,7 @@ private void decode_brr_block(short *buffer, const ubyte *block, bool first_bloc
 		range = 0;
 		filter = 0;
 	}
-
+	short[2] lastSamples = initial;
 	for (int i = 2; i < 18; i++) {
 		int s = block[i / 2];
 
@@ -1289,9 +1289,9 @@ private void decode_brr_block(short *buffer, const ubyte *block, bool first_bloc
 		}
 
 		switch (filter) {
-			case 1: s += (buffer[-1] * 15) >> 5; break;
-			case 2: s += ((buffer[-1] * 61) >> 6) - ((buffer[-2] * 15) >> 5); break;
-			case 3: s += ((buffer[-1] * 115) >> 7) - ((buffer[-2] * 13) >> 5); break;
+			case 1: s += (cast(int)lastSamples[1] * 15) >> 5; break;
+			case 2: s += ((cast(int)lastSamples[1] * 61) >> 6) - ((cast(int)lastSamples[0] * 15) >> 5); break;
+			case 3: s += ((cast(int)lastSamples[1] * 115) >> 7) - ((cast(int)lastSamples[0] * 13) >> 5); break;
 			default: break;
 		}
 
@@ -1304,11 +1304,14 @@ private void decode_brr_block(short *buffer, const ubyte *block, bool first_bloc
 		else if (s < -0x8000) s += 0x10000;
 		else if (s > 0x7FFF) s -= 0x10000;
 
-		*buffer++ = cast(short)s;
+		lastSamples[0] = lastSamples[1];
+		lastSamples[1] = cast(short)s;
+		buffer[0] = cast(short)s;
+		buffer = buffer[1 .. $];
 	}
 }
 
-private int sample_length(const ubyte *spc_memory, ushort start) nothrow @system {
+private int sample_length(const ubyte[] spc_memory, ushort start) nothrow @safe {
 	int end = start;
 	ubyte b;
 	do {
@@ -1322,7 +1325,7 @@ private int sample_length(const ubyte *spc_memory, ushort start) nothrow @system
 		return -1;
 }
 
-static int get_full_loop_len(const Sample *sa, const short *next_block, int first_loop_start) nothrow @system {
+static int get_full_loop_len(const Sample sa, const short[2] next_block, int first_loop_start) nothrow @system {
 	int loop_start = sa.length - sa.loop_len;
 	int no_match_found = true;
 	while (loop_start >= first_loop_start && no_match_found) {
