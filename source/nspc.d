@@ -1109,11 +1109,11 @@ struct NSPCPlayer {
 						theAllocator.dispose(st.track);
 					}
 					memcpy(st.track, substart, st.size + 1);
-					internal_validate_track(st.track, st.size, true);
+					internal_validate_track(st.track[0 .. st.size], true);
 				}
 				*cast(ushort *)(p + 1) = cast(ushort)sub_entry;
 			}
-			internal_validate_track(t.track, t.size, false);
+			internal_validate_track(t.track[0 .. t.size], false);
 		}
 		theAllocator.dispose(sub_table);
 	}
@@ -1213,31 +1213,25 @@ struct NSPCPlayer {
 			*p = sa.loop_len != 0 ? sa.data[sa.length - sa.loop_len] : 0;
 		}
 	}
-	void internal_validate_track(ubyte *data, int size, bool is_sub) @system {
-		for (int pos = 0; pos < size; ) {
+	void internal_validate_track(ubyte[] data, bool is_sub) @safe {
+		for (int pos = 0; pos < data.length; ) {
 			int byte_ = data[pos];
 			int next = pos + 1;
 
 			if (byte_ < 0x80) {
 				if (byte_ == 0) throw new Exception("Track can not contain [00]");
-				if (next != size && data[next] < 0x80) next++;
-				if (next == size) throw new Exception("Track can not end with note-length code");
+				if (next != data.length && data[next] < 0x80) next++;
+				if (next == data.length) throw new Exception("Track can not end with note-length code");
 			} else if (byte_ >= 0xE0) {
 				if (byte_ == 0xFF) throw new Exception("Invalid code [FF]");
-				next += code_length.ptr[byte_ - 0xE0];
-				if (next > size) {
-					//char *p = strcpy(&errbuf[0], "Incomplete code: [") + 18;
-					//for (; pos < size; pos++)
-					//	p += sprintf(p, "%02X ", data[pos]);
-					//for (; pos < next; pos++)
-					//	p += sprintf(p, "?? ");
-					//p[-1] = ']';
-					throw new Exception(format!"Incomplete code: [%(%02X %)]"(data[pos .. pos + size]));
+				next += code_length[byte_ - 0xE0];
+				if (next > data.length) {
+					throw new Exception(format!"Incomplete code: [%(%02X %)]"(data[pos .. pos + data.length]));
 				}
 
 				if (byte_ == 0xEF) {
 					if (is_sub) throw new Exception("Can't call sub from within a sub");
-					int sub = *cast(ushort *)&data[pos+1];
+					int sub = (cast(ushort[])data[pos+1 .. pos + 3])[0];
 					if (sub >= cur_song.subs) {
 						throw new Exception(format!"Subroutine %d not present"(sub));
 					}
@@ -1249,13 +1243,15 @@ struct NSPCPlayer {
 		}
 	}
 
-	Block *get_cur_block() nothrow @safe {
-		if (packs_loaded[2] < NUM_PACKS) {
-			Pack *p = &inmem_packs[packs_loaded[2]];
-			if (current_block >= 0 && current_block < p.blocks.length)
-				return &p.blocks[current_block];
+	Block* get_cur_block() @safe {
+		if (packs_loaded[2] >= NUM_PACKS) {
+			throw new Exception("Pack out of range");
 		}
-		return null;
+		Pack *p = &inmem_packs[packs_loaded[2]];
+		if ((current_block < 0) || (current_block >= p.blocks.length)) {
+			throw new Exception("Block out of range");
+		}
+		return &p.blocks[current_block];
 	}
 }
 
