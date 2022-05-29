@@ -313,7 +313,7 @@ struct NSPCPlayer {
 		}
 	}
 
-	void set_inst(SongState *st, ChannelState *c, int inst) nothrow @system {
+	void set_inst(ref SongState st, ref ChannelState c, int inst) nothrow @system {
 		// CA and up is for instruments in the second pack (set with FA xx)
 		if (inst >= 0x80)
 			inst += st.first_CA_inst - 0xCA;
@@ -322,7 +322,7 @@ struct NSPCPlayer {
 		if (inst < 0 || inst >= 64 || !samp[idata[0]].data ||
 			(idata[4] == 0 && idata[5] == 0))
 		{
-			assert(0, format!"ch %s: bad inst %X"(c - &st.chan[0], inst));
+			assert(0, format!"bad inst %X"(inst));
 		}
 
 		c.inst = cast(ubyte)inst;
@@ -340,7 +340,7 @@ struct NSPCPlayer {
 	}
 
 	// calculate how far to advance the sample pointer on each output sample
-	void calc_freq(ChannelState *c, int note16) nothrow @system {
+	void calc_freq(ref ChannelState c, int note16) nothrow @system {
 		static const ushort[13] note_freq_table = [
 			0x085F, 0x08DF, 0x0965, 0x09F4, 0x0A8C, 0x0B2C, 0x0BD6, 0x0C8B,
 			0x0D4A, 0x0E14, 0x0EEA, 0x0FCD, 0x10BE
@@ -370,7 +370,7 @@ struct NSPCPlayer {
 		c.note_freq = (freq * (32000U << (15 - 12))) / mixrate;
 	}
 
-	private int calc_vib_disp(ChannelState *c, int phase) nothrow @system {
+	private int calc_vib_disp(ref ChannelState c, int phase) nothrow @system {
 		int range = c.cur_vib_range;
 		if (range > 0xF0)
 			range = (range - 0xF0) * 256;
@@ -384,7 +384,7 @@ struct NSPCPlayer {
 	}
 
 	// do a Ex/Fx code
-	private void do_command(SongState *st, ChannelState *c) nothrow @system {
+	private void do_command(ref SongState st, ref ChannelState c) nothrow @system {
 		ubyte* p = c.ptr;
 		c.ptr += 1 + code_length[*p - 0xE0];
 		switch (*p) {
@@ -478,7 +478,7 @@ struct NSPCPlayer {
 	}
 
 	// $0654 + $08D4-$8EF
-	private void do_note(SongState *st, ChannelState *c, int note) nothrow @system {
+	private void do_note(ref SongState st, ref ChannelState c, int note) nothrow @system {
 		// using >=CA as a note switches to that instrument and plays note A4
 		if (note >= 0xCA) {
 			set_inst(st, c, note);
@@ -519,7 +519,7 @@ struct NSPCPlayer {
 		// as a normal note.
 		int next_note;
 		{	Parser p;
-			parser_init(&p, *c);
+			parser_init(&p, c);
 			do {
 				if (*p.ptr >= 0x80 && *p.ptr < 0xE0)
 					break;
@@ -570,7 +570,7 @@ struct NSPCPlayer {
 		pattop_state = state;
 	}
 
-	private void CF7(ChannelState *c) nothrow @system {
+	private void CF7(ref ChannelState c) nothrow @system {
 		if (c.note_release)
 			c.note_release--;
 
@@ -607,7 +607,7 @@ struct NSPCPlayer {
 	}
 
 	// $07F9 + $0625
-	private bool do_cycle(SongState *st) nothrow @system {
+	private bool do_cycle(ref SongState st) nothrow @system {
 		int ch;
 		ChannelState *c;
 		for (ch = 0; ch < 8; ch++) {
@@ -615,7 +615,7 @@ struct NSPCPlayer {
 			if (c.ptr == null) continue; //8F0
 
 			if (--c.next >= 0) {
-				CF7(c);
+				CF7(*c);
 			} else while (1) {
 				ubyte *p = c.ptr;
 
@@ -637,15 +637,15 @@ struct NSPCPlayer {
 				} else if (*p < 0xE0) {
 					c.ptr++;
 					c.next = c.note_len - 1;
-					do_note(st, c, *p);
+					do_note(st, *c, *p);
 					break;
 				} else { // E0-FF
-					do_command(st, c);
+					do_command(st, *c);
 				}
 			}
 			// $0B84
 			if (c.note.cycles == 0 && *c.ptr == 0xF9)
-				do_command(st, c);
+				do_command(st, *c);
 		}
 
 		st.patpos++;
@@ -672,7 +672,7 @@ struct NSPCPlayer {
 					c.tremolo_start_ctr++;
 				}
 			}
-			calc_total_vol(*st, *c, cast(byte)tphase);
+			calc_total_vol(st, *c, cast(byte)tphase);
 
 			// 0C79
 			slide(&c.panning);
@@ -683,7 +683,7 @@ struct NSPCPlayer {
 		return true;
 	}
 
-	bool do_cycle_no_sound(SongState *st) nothrow @system {
+	bool do_cycle_no_sound(ref SongState st) nothrow @system {
 		bool ret = do_cycle(st);
 		if (ret) {
 			int ch;
@@ -701,7 +701,7 @@ struct NSPCPlayer {
 			return -(st.cycle_timer * (0x10000 - delta) >> 8);
 	}
 
-	private void do_sub_cycle(SongState *st) nothrow @system {
+	private void do_sub_cycle(ref SongState st) nothrow @system {
 		ChannelState *c;
 		for (c = &st.chan[0]; c != &st.chan[8]; c++) {
 			if (c.ptr == null) continue;
@@ -709,13 +709,13 @@ struct NSPCPlayer {
 
 			bool changed = false;
 			if (c.tremolo_range && c.tremolo_start_ctr == c.tremolo_start) {
-				int p = c.tremolo_phase + sub_cycle_calc(*st, c.tremolo_speed);
+				int p = c.tremolo_phase + sub_cycle_calc(st, c.tremolo_speed);
 				changed = true;
-				calc_total_vol(*st, *c, cast(byte)p);
+				calc_total_vol(st, *c, cast(byte)p);
 			}
 			int pan = c.panning.cur;
 			if (c.panning.cycles) {
-				pan += sub_cycle_calc(*st, c.panning.delta);
+				pan += sub_cycle_calc(st, c.panning.delta);
 				changed = true;
 			}
 			if (changed) calc_vol_2(c, pan);
@@ -723,15 +723,15 @@ struct NSPCPlayer {
 			changed = false;
 			int note = c.note.cur; // $0BBC
 			if (c.note.cycles && c.cur_port_start_ctr == 0) {
-				note += sub_cycle_calc(*st, c.note.delta);
+				note += sub_cycle_calc(st, c.note.delta);
 				changed = true;
 			}
 			if (c.cur_vib_range && c.vibrato_start_ctr == c.vibrato_start) {
-				int p = c.vibrato_phase + sub_cycle_calc(*st, c.vibrato_speed);
-				note += calc_vib_disp(c, p);
+				int p = c.vibrato_phase + sub_cycle_calc(st, c.vibrato_speed);
+				note += calc_vib_disp(*c, p);
 				changed = true;
 			}
-			if (changed) calc_freq(c, note);
+			if (changed) calc_freq(*c, note);
 		}
 	}
 
