@@ -110,37 +110,6 @@ immutable ubyte[32] code_length = [
 	1, 1, 2, 3, 0, 1, 2, 1, 2, 1, 1, 3, 0, 1, 2, 3,
 	1, 3, 3, 0, 1, 3, 0, 3, 3, 3, 1, 2, 0, 0, 0, 0
 ];
-immutable uint[169] pack_orig_crc = [
-	0x35994B97, 0xDB04D065, 0xC13D8165, 0xEEFF028E, 0x5330392D, 0x705AEBBC,
-	0x4ED3BBAB, 0xFF11F6A1, 0x9E69B6C1, 0xBF0F580B, 0x0460DAD8, 0xD3EEC6FB,
-	0x082C8FC1, 0x5B81C947, 0xE157E6C2, 0x641EB570, 0x79C6A5D2, 0xFE892ACA,
-	0xEE4C1723, 0x947F5985, 0x20822EF9, 0xCF193A5F, 0x311520DA, 0x10765295,
-	0xAA43B31F, 0xE72085EC, 0x324821DE, 0x73054B6A, 0x0AE457C7, 0xB9D0E9D4,
-	0xC93C3678, 0x3DFED2B6, 0xDEB68F1C, 0x8C62B8B6, 0x7F35744F, 0x8D3E7AF9,
-	0xFCAF31CD, 0x827F8B23, 0x347E2419, 0x9945AE89, 0x83245B62, 0x6432A069,
-	0x58290E16, 0xCED6200A, 0x1424E797, 0x802E483A, 0x53583F0B, 0x1FB73242,
-	0x9BA15381, 0x83BFCDBD, 0x07E9A480, 0x105074C2, 0xD90BBBC1, 0xE9E68007,
-	0x9E7DAAC1, 0xEEECB692, 0x3B4F935F, 0x6B9CB808, 0x2625C94A, 0xA9210DC4,
-	0x8EF74F19, 0x3EF02201, 0x7B8B59E9, 0xAA163725, 0x849B7F34, 0xE15EF409,
-	0xC2774561, 0x8898F96B, 0x87344C8F, 0xCFF94FCF, 0x58907350, 0x7269B3F8,
-	0x66C0991C, 0x4992871D, 0xB72E486D, 0xBF0BE12F, 0xA3509B6F, 0xBEF628D0,
-	0x9452EC07, 0x032D37F3, 0x559DDB52, 0x7429ACCE, 0xF3FF8749, 0x6DDC7BB8,
-	0x5BDA587E, 0x95B863A7, 0x35BD7758, 0x733A7B93, 0xFD61E984, 0x93B4834F,
-	0xF446B13F, 0x1D3426C1, 0x9BA7D579, 0x2DB7314D, 0x2630298F, 0xB432655A,
-	0xE2E071F4, 0x8B393217, 0x51033BB3, 0x1619C100, 0x8EB3F2FC, 0x82207885,
-	0xEB4767C6, 0x6CDE8654, 0x61DB258E, 0x2DBA2FEF, 0x19F45E6D, 0xF90F25A4,
-	0xDDE08443, 0xD187DFCB, 0x0630027E, 0xCEFFC22B, 0xF5F39A6D, 0x88C82FBA,
-	0xF3B86811, 0x005EEE83, 0xBADE3AC4, 0xBE11ECEA, 0x2EA452C2, 0x7C09903E,
-	0xD3055E99, 0x184714DA, 0x8C3E615A, 0x4FB3F125, 0x6BC1A993, 0x58BDDFE4,
-	0x8E8ED38B, 0x10637EEB, 0xC654BDFA, 0x6AB0C2F7, 0xDFFF0971, 0x9855C03D,
-	0xA36E5FD6, 0xF6A72D30, 0x80AAE5AD, 0x1195ED2F, 0x87A0336E, 0x824F38DB,
-	0x2458ADC6, 0xCCD4AC63, 0xAB6C84DB, 0x90DFCA16, 0x55F1C184, 0x2BFFE745,
-	0xE5F96BF9, 0x9BE7C8D6, 0x0F5DADC7, 0x02BEA184, 0x66CC6C71, 0x8100B1C5,
-	0x2E894645, 0xF487A0B5, 0x60EDA440, 0x4CBA4829, 0xFD5F55ED, 0x37C5DEA7,
-	0x664D83E7, 0x135D3B35, 0x7ED32ACE, 0x2D23FA7E, 0x5B969EA6, 0xDC7A49AD,
-	0xEE1071E0, 0x28E8DB77, 0x02E1409C, 0x0665F2E2, 0xE01946DF, 0xB6E7A174,
-	0xD07DBF27,
-];
 
 enum NUM_SONGS = 0xBF;
 enum NUM_PACKS = 0xA9;
@@ -843,11 +812,9 @@ struct NSPCPlayer {
 
 		song_address = read!(typeof(song_address))(romData, SONG_POINTER_TABLE);
 
-		init_crc();
 		for (int i = 0; i < NUM_PACKS; i++) {
 			int size;
 			int count = 0;
-			uint crc;
 			block *blocks = null;
 			bool valid = true;
 			pack *rp = &rom_packs[i];
@@ -858,7 +825,6 @@ struct NSPCPlayer {
 				goto bad_pointer;
 			}
 
-			crc = ~0;
 			while ((size = read!ushort(romData, offset)) > 0) {
 				int spc_addr = read!ushort(romData, offset + 2);
 				if (spc_addr + size > 0x10000) { valid = false; break; }
@@ -878,36 +844,13 @@ struct NSPCPlayer {
 				}*/
 
 				spc[spc_addr .. spc_addr + size] = romData[offset + 4 .. offset + 4 + size];
-				crc = update_crc(crc, cast(ubyte *)&size, 2);
-				crc = update_crc(crc, cast(ubyte *)&spc_addr, 2);
-				crc = update_crc(crc, &spc[spc_addr], size);
 			}
-			crc = ~update_crc(crc, cast(ubyte *)&size, 2);
 	bad_pointer:
-			rp.status = valid ? crc != pack_orig_crc[i] : 2;
 			rp.block_count = count;
 			rp.blocks = blocks;
 			inmem_packs[i].status = 0;
 		}
 		return true;
-	}
-	uint[256] crc_table;
-	private void init_crc() nothrow {
-		for (int i = 0; i < 256; i++) {
-			uint crc = i;
-			for (int j = 8; j; j--)
-				if (crc & 1)
-					crc = (crc >> 1) ^ 0xEDB88320;
-				else
-					crc = (crc >> 1);
-			crc_table[i] = crc;
-		}
-	}
-	private uint update_crc(uint crc, ubyte *block, int size) nothrow {
-		do {
-			crc = (crc >> 8) ^ crc_table[(crc ^ *block++) & 0xFF];
-		} while (--size);
-		return crc;
 	}
 
 	void free_song(Song *s) nothrow {
