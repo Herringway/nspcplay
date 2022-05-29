@@ -55,7 +55,7 @@ int main(string[] args) {
 	NSPCPlayer nspc;
 	// initialization
 	trace("Initializing NSPC");
-	nspc.initialize();
+	nspc.initialize(sampleRate);
 
 	trace("Loading NSPC file");
 	// Load file

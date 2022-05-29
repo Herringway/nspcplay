@@ -8,17 +8,20 @@ import std.experimental.allocator;
 struct SongState {
 	ChannelState[16] chan;
 	byte transpose;
-	Slider volume;
-	Slider tempo;
-	int next_timer_tick, cycle_timer;
+	Slider volume = Slider(0xC000);
+	Slider tempo = Slider(0x2000);
+	int next_timer_tick;
+	int cycle_timer = 255;
 	ubyte first_CA_inst; // set with FA
 	ubyte repeat_count;
-	int ordnum;
+	int ordnum = -1;
 	int patpos; // Number of cycles since top of pattern
 }
 struct Slider {
-	ushort cur, delta;
-	ubyte cycles, target;
+	ushort cur;
+	ushort delta;
+	ubyte cycles;
+	ubyte target;
 }
 
 struct ChannelState {
@@ -39,8 +42,9 @@ struct ChannelState {
 	ubyte inst_adsr1;
 	ubyte finetune;
 	byte transpose;
-	Slider panning; ubyte pan_flags;
-	Slider volume;
+	Slider panning = Slider(0x0A00);
+	ubyte pan_flags;
+	Slider volume = Slider(0xFF00);
 	ubyte total_vol;
 	byte left_vol, right_vol;
 
@@ -53,7 +57,8 @@ struct ChannelState {
 	ubyte tremolo_phase, tremolo_start_ctr;
 
 	Sample *samp;
-	int samp_pos, note_freq;
+	int samp_pos = -1;
+	int note_freq;
 
 	double env_height; // envelope height
 	double decay_rate;
@@ -734,35 +739,26 @@ struct NSPCPlayer {
 		state.cycle_timer += state.tempo.cur >> 8;
 		if (state.cycle_timer >= 256) {
 			state.cycle_timer -= 256;
-			while (!do_cycle(&state)) {
+			while (!do_cycle(state)) {
 				load_pattern();
 				if (!song_playing) return false;
 			}
 		} else {
-			do_sub_cycle(&state);
+			do_sub_cycle(state);
 		}
 		return true;
 	}
 
-	void initialize() nothrow @system {
-		memset(&state, 0, state.sizeof);
-		int i;
-		for (i = 0; i < 8; i++) {
-			state.chan[i].volume.cur = 0xFF00;
-			state.chan[i].panning.cur = 0x0A00;
-			state.chan[i].samp_pos = -1;
-		}
-		state.volume.cur = 0xC000;
-		state.tempo.cur = 0x2000;
-		state.cycle_timer = 255;
+	void initialize(int sampleRate) nothrow @safe {
+		state = state.init;
 
-		state.ordnum = -1;
 		if (cur_song.order.length) {
 			load_pattern();
 		} else {
 			pattop_state = state;
 			song_playing = false;
 		}
+		mixrate = sampleRate;
 	}
 	void play() @system {
 		song_playing = true;
@@ -890,7 +886,7 @@ struct NSPCPlayer {
 		inst_base = 0x6E00;
 		if (samp[0].data == null)
 			song_playing = false;
-		initialize();
+		initialize(mixrate);
 	}
 	void load_songpack(int new_pack) nothrow @system {
 		if (packs_loaded[2] == new_pack)
@@ -938,7 +934,7 @@ struct NSPCPlayer {
 			spc[b.spc_address .. b.spc_address + b.size] = b.data[0 .. b.size];
 			decompile_song(cur_song, b.spc_address, b.spc_address + b.size);
 		}
-		initialize();
+		initialize(mixrate);
 	}
 
 	void select_block_by_address(int spc_addr) @system {
