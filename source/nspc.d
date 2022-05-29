@@ -1,3 +1,5 @@
+module nspc;
+
 import core.stdc.math;
 import core.stdc.stdlib;
 import core.stdc.string;
