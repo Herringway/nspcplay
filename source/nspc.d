@@ -63,8 +63,8 @@ struct sample {
 	int loop_len;
 }
 struct Parser {
-	ubyte *ptr;
-	ubyte *sub_ret;
+	const(ubyte)* ptr;
+	const(ubyte)* sub_ret;
 	int sub_start;
 	ubyte sub_count;
 	ubyte note_len;
@@ -235,28 +235,15 @@ struct NSPCPlayer {
 		bufs_used++;
 	}
 
-	void load_pattern_into_tracker() nothrow @system {
-		pat_length = 0;
-		for (int ch = 0; ch < 8; ch++) {
-			if (pattop_state.chan[ch].ptr == null) continue;
-			Parser p;
-			parser_init(&p, &pattop_state.chan[ch]);
-			do {
-				if (*p.ptr >= 0x80 && *p.ptr < 0xE0)
-					pat_length += p.note_len;
-			} while (parser_advance(&p));
-			break;
-		}
-	}
-	void parser_init(Parser *p, const(channel_state)* c) nothrow @system {
-		p.ptr = cast(ubyte*)c.ptr;
+	void parser_init(Parser *p, const(channel_state)* c) nothrow @safe {
+		p.ptr = cast(const(ubyte)*)c.ptr;
 		p.sub_start = c.sub_start;
-		p.sub_ret = cast(ubyte*)c.sub_ret;
+		p.sub_ret = cast(const(ubyte)*)c.sub_ret;
 		p.sub_count = c.sub_count;
 		p.note_len = c.note_len;
 	}
 
-	ubyte *next_code(ubyte *p) nothrow @system {
+	const(ubyte)* next_code(const(ubyte)* p) nothrow @system {
 		ubyte chr = *p++;
 		if (chr < 0x80)
 			p += *p < 0x80;
@@ -756,7 +743,6 @@ struct NSPCPlayer {
 			while (!do_cycle(&state)) {
 				load_pattern();
 				if (!song_playing) return false;
-				load_pattern_into_tracker();
 			}
 		} else {
 			do_sub_cycle(&state);
@@ -1044,7 +1030,7 @@ struct NSPCPlayer {
 			for (; chan; chan--)
 				first &= *cast(ushort *)&spc[tpp -= 2] == 0;
 
-			ubyte *end = &spc[tp];
+			const(ubyte)* end = &spc[tp];
 			while (*end) end = next_code(end);
 			end += first;
 			tracks_end = cast(ushort)(end - &spc[0]);
@@ -1096,7 +1082,7 @@ struct NSPCPlayer {
 				}
 			}
 			// Determine the end of the track.
-			ubyte *track_end;
+			const(ubyte)* track_end;
 			for (track_end = &spc[start]; track_end < &spc.ptr[next] && *track_end != 0; track_end = next_code(track_end)) {}
 
 			t.size = cast(int)((track_end - &spc[0]) - start);
@@ -1107,7 +1093,7 @@ struct NSPCPlayer {
 			memcpy(t.track, &spc[start], t.size);
 			t.track[t.size] = 0;
 
-			for (ubyte *p = t.track; p < t.track + t.size; p = next_code(p)) {
+			for (const(ubyte)* p = t.track; p < t.track + t.size; p = next_code(p)) {
 				if (*p != 0xEF) continue;
 				int sub_ptr = *cast(ushort *)(p + 1);
 				int sub_entry;
@@ -1128,7 +1114,7 @@ struct NSPCPlayer {
 					track *st = &s.sub[sub_entry];
 
 					ubyte *substart = &spc[sub_ptr];
-					ubyte *subend = substart;
+					const(ubyte)* subend = substart;
 					while (*subend != 0) subend = next_code(subend);
 					st.size = cast(int)(subend - substart);
 					st.track = &theAllocator.makeArray!ubyte(st.size + 1)[0];
