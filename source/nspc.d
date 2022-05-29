@@ -865,14 +865,14 @@ struct NSPCPlayer {
 
 	void load_instruments() nothrow @system {
 		free_samples();
-		memset(&spc[0], 0, 0x10000);
+		spc[] = 0;
 		for (int i = 0; i < 2; i++) {
 			int p = packs_loaded[i];
 			if (p >= NUM_PACKS) continue;
 			int addr, size;
 			auto base = rom_packs[p].start_address - 0xC00000;
-			while ((size = (cast(ushort[])(romData[base .. base + 2]))[0]) != 0) {
-				addr = (cast(ushort[])(romData[base + 2 .. base + 4]))[0];
+			while ((size = (cast(const(ushort)[])(romData[base .. base + 2]))[0]) != 0) {
+				addr = (cast(const(ushort)[])(romData[base + 2 .. base + 4]))[0];
 				if (size + addr >= 0x10000) {
 					assert(0, "Invalid SPC block");
 				}
@@ -1152,7 +1152,6 @@ struct NSPCPlayer {
 
 			do {
 				needs_another_loop = false;
-
 				for (int pos = decoding_start; pos < end; pos += BRR_BLOCK_SIZE) {
 					decode_brr_block(p[0 .. 16], [p[-2],p[-1]], spc[pos .. pos + BRR_BLOCK_SIZE], !!first_block);
 					p += 16;
