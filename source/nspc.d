@@ -341,7 +341,7 @@ struct NSPCPlayer {
 
 	// calculate how far to advance the sample pointer on each output sample
 	void calc_freq(ref ChannelState c, int note16) nothrow @system {
-		static const ushort[13] note_freq_table = [
+		static immutable ushort[13] note_freq_table = [
 			0x085F, 0x08DF, 0x0965, 0x09F4, 0x0A8C, 0x0B2C, 0x0BD6, 0x0C8B,
 			0x0D4A, 0x0E14, 0x0EEA, 0x0FCD, 0x10BE
 		];
