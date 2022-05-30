@@ -24,6 +24,16 @@ struct Slider {
 	ushort delta;
 	ubyte cycles;
 	ubyte target;
+
+	private void slide() nothrow @safe pure {
+		if (cycles) {
+			if (--cycles == 0) {
+				cur = target << 8;
+			} else {
+				cur += delta;
+			}
+		}
+	}
 }
 
 struct ChannelState {
@@ -334,16 +344,6 @@ struct NSPCPlayer {
 		s.target = cast(ubyte) target;
 	}
 
-	private void slide(ref Slider s) nothrow @safe {
-		if (s.cycles) {
-			if (--s.cycles == 0) {
-				s.cur = s.target << 8;
-			} else {
-				s.cur += s.delta;
-			}
-		}
-	}
-
 	void set_inst(ref SongState st, ref ChannelState c, int inst) nothrow @system {
 		// CA and up is for instruments in the second pack (set with FA xx)
 		if (inst >= 0x80) {
@@ -632,7 +632,7 @@ struct NSPCPlayer {
 		// 0D60
 		if (c.note.cycles) {
 			if (c.cur_port_start_ctr == 0) {
-				slide(c.note);
+				c.note.slide();
 				calc_freq(c, c.note.cur);
 			} else {
 				c.cur_port_start_ctr--;
@@ -709,8 +709,8 @@ struct NSPCPlayer {
 
 		st.patpos++;
 
-		slide(st.tempo);
-		slide(st.volume);
+		st.tempo.slide();
+		st.volume.slide();
 
 		for (c = &st.chan[0]; c != &st.chan[8]; c++) {
 			if (c.ptr == null) {
@@ -718,7 +718,7 @@ struct NSPCPlayer {
 			}
 
 			// @ 0C40
-			slide(c.volume);
+			c.volume.slide();
 
 			// @ 0C4D
 			int tphase = 0;
@@ -737,7 +737,7 @@ struct NSPCPlayer {
 			calc_total_vol(st, *c, cast(byte) tphase);
 
 			// 0C79
-			slide(c.panning);
+			c.panning.slide();
 
 			// 0C86: volume stuff
 			calc_vol_2(c, c.panning.cur);
