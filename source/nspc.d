@@ -273,7 +273,7 @@ struct NSPCPlayer {
 		bufs_used++;
 	}
 
-	void parser_init(Parser* p, ChannelState c) nothrow @safe {
+	void parser_init(ref Parser p, ChannelState c) nothrow @safe {
 		p.ptr = cast(const(ubyte)*) c.ptr;
 		p.sub_start = c.sub_start;
 		p.sub_ret = cast(const(ubyte)*) c.sub_ret;
@@ -291,7 +291,7 @@ struct NSPCPlayer {
 		return p;
 	}
 
-	bool parser_advance(Parser* p) nothrow @system {
+	bool parser_advance(ref Parser p) nothrow @system {
 		int chr = *p.ptr;
 		if (chr == 0) {
 			if (p.sub_count == 0) {
@@ -570,12 +570,12 @@ struct NSPCPlayer {
 		int next_note;
 		{
 			Parser p;
-			parser_init(&p, c);
+			parser_init(p, c);
 			do {
 				if (*p.ptr >= 0x80 && *p.ptr < 0xE0) {
 					break;
 				}
-			} while (parser_advance(&p));
+			} while (parser_advance(p));
 			next_note = *p.ptr;
 		}
 
