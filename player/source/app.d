@@ -38,7 +38,12 @@ bool initAudio(SDL_AudioCallback fun, ubyte channels, uint sampleRate, void* use
 
 extern (C) void _sampling_func(void* user, ubyte* buf, int bufSize) nothrow {
 	NSPCPlayer* nspc = cast(NSPCPlayer*) user;
-	nspc.fill_buffer(cast(short[2][])(buf[0 .. bufSize]));
+	try {
+		nspc.fill_buffer(cast(short[2][])(buf[0 .. bufSize]));
+	} catch (Error e) {
+		assumeWontThrow(writeln(e));
+		throw e;
+	}
 }
 
 int main(string[] args) {
