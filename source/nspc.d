@@ -322,9 +322,9 @@ struct NSPCPlayer {
 		c.total_vol = v * v >> 8;
 	}
 
-	private int calc_vol_3(const ChannelState c, int pan, int flag) nothrow @system {
+	private int calc_vol_3(const ChannelState c, int pan, int flag) nothrow @safe {
 		static immutable ubyte[21] pan_table = [0x00, 0x01, 0x03, 0x07, 0x0D, 0x15, 0x1E, 0x29, 0x34, 0x42, 0x51, 0x5E, 0x67, 0x6E, 0x73, 0x77, 0x7A, 0x7C, 0x7D, 0x7E, 0x7F];
-		const ubyte* ph = &pan_table[pan >> 8];
+		const ubyte[] ph = pan_table[pan >> 8 .. (pan >> 8) + 2];
 		int v = ph[0] + ((ph[1] - ph[0]) * (pan & 255) >> 8);
 		v = v * c.total_vol >> 8;
 		if (c.pan_flags & flag) {
