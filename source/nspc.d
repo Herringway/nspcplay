@@ -205,51 +205,51 @@ struct NSPCPlayer {
 
 			//		for (int blah = 0; blah < 50; blah++) {
 			int left = 0, right = 0;
-			ChannelState* c = &state.chan[0];
-			for (int cm = chmask; cm; c++, cm >>= 1) {
+			int i;
+			for (int cm = chmask; cm; i++, cm >>= 1) {
 				if (!(cm & 1)) {
 					continue;
 				}
 
-				if (c.samp_pos < 0) {
+				if (state.chan[i].samp_pos < 0) {
 					continue;
 				}
 
-				int ipos = c.samp_pos >> 15;
+				int ipos = state.chan[i].samp_pos >> 15;
 
-				Sample* s = c.samp;
+				Sample* s = state.chan[i].samp;
 				if (ipos > s.length) {
 					assert(0, format!"Sample position exceeds sample length! %d > %d"(ipos, s.length));
 				}
 
-				if (c.note_release != 0) {
-					if (c.inst_adsr1 & 0x1F) {
-						c.env_height *= c.decay_rate;
+				if (state.chan[i].note_release != 0) {
+					if (state.chan[i].inst_adsr1 & 0x1F) {
+						state.chan[i].env_height *= state.chan[i].decay_rate;
 					}
 				} else {
 					// release takes about 15ms (not dependent on tempo)
-					c.env_height -= (32000 / 512.0) / mixrate;
-					if (c.env_height < 0) {
-						c.samp_pos = -1;
+					state.chan[i].env_height -= (32000 / 512.0) / mixrate;
+					if (state.chan[i].env_height < 0) {
+						state.chan[i].samp_pos = -1;
 						continue;
 					}
 				}
-				double volume = c.env_height / 128.0;
+				double volume = state.chan[i].env_height / 128.0;
 				assert(s.data);
 				int s1 = s.data[ipos];
-				s1 += (s.data[ipos + 1] - s1) * (c.samp_pos & 0x7FFF) >> 15;
+				s1 += (s.data[ipos + 1] - s1) * (state.chan[i].samp_pos & 0x7FFF) >> 15;
 
-				left += cast(int)(s1 * c.left_vol * volume);
-				right += cast(int)(s1 * c.right_vol * volume);
+				left += cast(int)(s1 * state.chan[i].left_vol * volume);
+				right += cast(int)(s1 * state.chan[i].right_vol * volume);
 
 				//			int sp = c.samp_pos;
 
-				c.samp_pos += c.note_freq;
-				if ((c.samp_pos >> 15) >= s.length) {
+				state.chan[i].samp_pos += state.chan[i].note_freq;
+				if ((state.chan[i].samp_pos >> 15) >= s.length) {
 					if (s.loop_len) {
-						c.samp_pos -= s.loop_len << 15;
+						state.chan[i].samp_pos -= s.loop_len << 15;
 					} else {
-						c.samp_pos = -1;
+						state.chan[i].samp_pos = -1;
 					}
 				}
 				//			if (blah != 1) c.samp_pos = sp;
@@ -333,18 +333,18 @@ struct NSPCPlayer {
 		return v;
 	}
 
-	private void calc_vol_2(ChannelState* c, int pan) nothrow @system {
-		c.left_vol = cast(byte) calc_vol_3(*c, pan, 0x80);
-		c.right_vol = cast(byte) calc_vol_3(*c, 0x1400 - pan, 0x40);
+	private void calc_vol_2(ref ChannelState c, int pan) nothrow @safe {
+		c.left_vol = cast(byte) calc_vol_3(c, pan, 0x80);
+		c.right_vol = cast(byte) calc_vol_3(c, 0x1400 - pan, 0x40);
 	}
 
-	private void make_slider(Slider* s, int cycles, int target) nothrow @system {
+	private void make_slider(ref Slider s, int cycles, int target) nothrow @safe {
 		s.delta = cast(ushort)(((target << 8) - (s.cur & 0xFF00)) / cycles);
 		s.cycles = cast(ubyte) cycles;
 		s.target = cast(ubyte) target;
 	}
 
-	void set_inst(ref SongState st, ref ChannelState c, int inst) nothrow @system {
+	void set_inst(ref SongState st, ref ChannelState c, int inst) nothrow @safe {
 		// CA and up is for instruments in the second pack (set with FA xx)
 		if (inst >= 0x80) {
 			inst += st.first_CA_inst - 0xCA;
@@ -380,7 +380,7 @@ struct NSPCPlayer {
 	}
 
 	// calculate how far to advance the sample pointer on each output sample
-	void calc_freq(ref ChannelState c, int note16) nothrow @system {
+	void calc_freq(ref ChannelState c, int note16) nothrow @safe {
 		static immutable ushort[13] note_freq_table = [0x085F, 0x08DF, 0x0965, 0x09F4, 0x0A8C, 0x0B2C, 0x0BD6, 0x0C8B, 0x0D4A, 0x0E14, 0x0EEA, 0x0FCD, 0x10BE];
 
 		// What is this for???
@@ -402,7 +402,7 @@ struct NSPCPlayer {
 		freq <<= 1;
 		freq >>= 6 - octave;
 
-		ubyte* inst_freq = &spc[inst_base + 6 * c.inst + 4];
+		ubyte[] inst_freq = spc[inst_base + 6 * c.inst + 4 .. inst_base + 6 * c.inst + 6];
 		freq *= (inst_freq[0] << 8 | inst_freq[1]);
 		freq >>= 8;
 		freq &= 0x3fff;
@@ -410,7 +410,7 @@ struct NSPCPlayer {
 		c.note_freq = (freq * (32000U << (15 - 12))) / mixrate;
 	}
 
-	private int calc_vib_disp(ref ChannelState c, int phase) nothrow @system {
+	private int calc_vib_disp(ref ChannelState c, int phase) nothrow @safe {
 		int range = c.cur_vib_range;
 		if (range > 0xF0) {
 			range = (range - 0xF0) * 256;
@@ -441,7 +441,7 @@ struct NSPCPlayer {
 				c.panning.cur = (p[1] & 0x1F) << 8;
 				break;
 			case 0xE2:
-				make_slider(&c.panning, p[1], p[2]);
+				make_slider(c.panning, p[1], p[2]);
 				break;
 			case 0xE3:
 				c.vibrato_start = p[1];
@@ -457,13 +457,13 @@ struct NSPCPlayer {
 				st.volume.cur = p[1] << 8;
 				break;
 			case 0xE6:
-				make_slider(&st.volume, p[1], p[2]);
+				make_slider(st.volume, p[1], p[2]);
 				break;
 			case 0xE7:
 				st.tempo.cur = p[1] << 8;
 				break;
 			case 0xE8:
-				make_slider(&st.tempo, p[1], p[2]);
+				make_slider(st.tempo, p[1], p[2]);
 				break;
 			case 0xE9:
 				st.transpose = p[1];
@@ -483,7 +483,7 @@ struct NSPCPlayer {
 				c.volume.cur = p[1] << 8;
 				break;
 			case 0xEE:
-				make_slider(&c.volume, p[1], p[2]);
+				make_slider(c.volume, p[1], p[2]);
 				break;
 			case 0xEF:
 				c.sub_start = p[1] | (p[2] << 8);
@@ -515,7 +515,7 @@ struct NSPCPlayer {
 						target -= 0xFF;
 					}
 					target += c.transpose;
-					make_slider(&c.note, p[2], target & 0x7F);
+					make_slider(c.note, p[2], target & 0x7F);
 					break;
 				}
 			case 0xFA:
@@ -558,7 +558,7 @@ struct NSPCPlayer {
 				} else {
 					target += c.port_range;
 				}
-				make_slider(&c.note, c.port_length, target & 0x7F);
+				make_slider(c.note, c.port_length, target & 0x7F);
 			}
 
 			calc_freq(c, c.note.cur);
@@ -740,7 +740,7 @@ struct NSPCPlayer {
 			c.panning.slide();
 
 			// 0C86: volume stuff
-			calc_vol_2(c, c.panning.cur);
+			calc_vol_2(*c, c.panning.cur);
 		}
 		return true;
 	}
@@ -786,7 +786,7 @@ struct NSPCPlayer {
 				changed = true;
 			}
 			if (changed) {
-				calc_vol_2(c, pan);
+				calc_vol_2(*c, pan);
 			}
 
 			changed = false;
