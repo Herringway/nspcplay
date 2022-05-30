@@ -27,7 +27,7 @@ struct Slider {
 }
 
 struct ChannelState {
-	ubyte* ptr;
+	const(ubyte)* ptr;
 
 	int next; // time left in note
 
@@ -39,7 +39,7 @@ struct ChannelState {
 	ubyte note_release; // time to release note, in cycles
 
 	int sub_start; // current subroutine number
-	ubyte* sub_ret; // where to return to after sub
+	const(ubyte)* sub_ret; // where to return to after sub
 	ubyte sub_count; // number of loops
 
 	ubyte inst; // instrument
@@ -77,8 +77,8 @@ struct ChannelState {
 	int samp_pos = -1;
 	int note_freq;
 
-	double env_height; // envelope height
-	double decay_rate;
+	double env_height = 0.0; // envelope height
+	double decay_rate = 0.0;
 }
 
 struct Sample {
@@ -350,8 +350,17 @@ struct NSPCPlayer {
 			inst += st.first_CA_inst - 0xCA;
 		}
 
-		ubyte* idata = &spc[inst_base + 6 * inst];
-		if (inst < 0 || inst >= 64 || !samp[idata[0]].data || (idata[4] == 0 && idata[5] == 0)) {
+		ubyte[] idata = spc[inst_base + 6 * inst .. inst_base + 6 * (inst + 1)];
+		if (inst < 0) {
+			assert(0, format!"instrument %X < 0"(inst));
+		}
+		if (inst >= 64) {
+			assert(0, format!"instrument %X > 64"(inst));
+		}
+		if (!samp[idata[0]].data) {
+			assert(0, format!"no data for instrument %X"(inst));
+		}
+		if ((idata[4] == 0 && idata[5] == 0)) {
 			assert(0, format!"bad inst %X"(inst));
 		}
 
@@ -421,7 +430,7 @@ struct NSPCPlayer {
 
 	// do a Ex/Fx code
 	private void do_command(ref SongState st, ref ChannelState c) nothrow @system {
-		ubyte* p = c.ptr;
+		const(ubyte)* p = c.ptr;
 		c.ptr += 1 + code_length[*p - 0xE0];
 		switch (*p) {
 			case 0xE0:
@@ -667,7 +676,7 @@ struct NSPCPlayer {
 				CF7(*c);
 			} else
 				while (1) {
-					ubyte* p = c.ptr;
+					const(ubyte)* p = c.ptr;
 
 					if (*p == 0) { // end of sub or pattern
 						if (c.sub_count) { // end of sub
@@ -834,7 +843,7 @@ struct NSPCPlayer {
 
 	}
 
-	bool open_rom(const(ubyte)[] data) @system {
+	bool open_rom(const(ubyte)[] data) @safe {
 		romData = data;
 		if (romData.length < 0x300000) {
 			assert(0, "An EarthBound ROM must be at least 3 MB");
@@ -857,8 +866,7 @@ struct NSPCPlayer {
 
 		for (int i = 0; i < NUM_PACKS; i++) {
 			int size;
-			int count = 0;
-			Block* blocks = null;
+			Block[] blocks;
 			bool valid = true;
 			Pack* rp = &rom_packs[i];
 
@@ -879,10 +887,9 @@ struct NSPCPlayer {
 					break;
 				}
 
-				count++;
-				blocks = cast(Block*) realloc(blocks, Block.sizeof * count);
-				blocks[count - 1].size = cast(ushort) size;
-				blocks[count - 1].spc_address = cast(ushort) spc_addr;
+				blocks.length++;
+				blocks[$ - 1].size = cast(ushort) size;
+				blocks[$ - 1].spc_address = cast(ushort) spc_addr;
 
 				/*			if (spc_addr == 0x0500) {
 					int back = ftell(f);
@@ -893,41 +900,18 @@ struct NSPCPlayer {
 
 				spc[spc_addr .. spc_addr + size] = romData[offset + 4 .. offset + 4 + size];
 			}
-			rp.blocks = blocks[0 .. count];
+			rp.blocks = blocks;
 			inmem_packs[i].status = 0;
 		}
 		return true;
 	}
 
-	void free_song(Song* s) nothrow @system {
-		int pat, ch, sub;
-		if (!s.order.length) {
-			return;
-		}
-		s.changed = false;
-		for (pat = 0; pat < s.pattern.length; pat++) {
-			for (ch = 0; ch < 8; ch++) {
-				theAllocator.dispose(s.pattern[pat][ch].track);
-			}
-		}
-		theAllocator.dispose(s.pattern);
-		for (sub = 0; sub < s.subs; sub++) {
-			theAllocator.dispose(s.sub[sub].track);
-		}
-		theAllocator.dispose(s.sub);
-	}
-
-	void free_pack(Pack* p) nothrow @system {
-		for (int i = 0; i < p.blocks.length; i++) {
-			theAllocator.dispose(&p.blocks[i].data[0]);
-		}
-		theAllocator.dispose(&p.blocks[0]);
+	void free_pack(Pack* p) nothrow @safe {
 		p.status = 0;
 	}
 
-	void free_samples() nothrow @system {
+	void free_samples() nothrow @safe {
 		for (int sn = 0; sn < 128; sn++) {
-			theAllocator.dispose(samp[sn].data);
 			samp[sn].data = null;
 		}
 	}
@@ -1014,8 +998,6 @@ struct NSPCPlayer {
 
 	void select_block(int block_) @system {
 		current_block = block_;
-
-		free_song(&cur_song);
 
 		Block* b = get_cur_block();
 		if (b != null) {
@@ -1167,10 +1149,7 @@ struct NSPCPlayer {
 			}
 
 			t.size = cast(int)((track_end - &spc[0]) - start);
-			t.track = &theAllocator.makeArray!ubyte(t.size + 1)[0];
-			scope (failure) {
-				theAllocator.dispose(t.track);
-			}
+			t.track = &(new ubyte[](t.size + 1))[0];
 			t.track[0 .. t.size] = spc[start .. start + t.size];
 			t.track[t.size] = 0;
 
@@ -1188,10 +1167,7 @@ struct NSPCPlayer {
 					// sub_entry doesn't already exist in sub_table; create it
 					sub_entry = song.subs++;
 
-					sub_table = &theAllocator.makeArray!ushort(song.subs)[0];
-					scope (failure) {
-						theAllocator.dispose(sub_table);
-					}
+					sub_table = &(new ushort[](song.subs))[0];
 					sub_table[sub_entry] = cast(ushort) sub_ptr;
 
 					song.sub = cast(Track*) realloc(song.sub, Track.sizeof * song.subs);
@@ -1203,10 +1179,7 @@ struct NSPCPlayer {
 						subend = next_code(subend);
 					}
 					st.size = cast(int)(subend - substart);
-					st.track = &theAllocator.makeArray!ubyte(st.size + 1)[0];
-					scope (failure) {
-						theAllocator.dispose(st.track);
-					}
+					st.track = &(new ubyte[](st.size + 1))[0];
 					st.track[0 .. st.size + 1] = substart[0 .. st.size + 1];
 					internal_validate_track(st.track[0 .. st.size], true);
 				}
@@ -1214,7 +1187,6 @@ struct NSPCPlayer {
 			}
 			internal_validate_track(t.track[0 .. t.size], false);
 		}
-		theAllocator.dispose(sub_table);
 	}
 
 	void decode_samples(const(ubyte)[] ptrtable) nothrow @system {
