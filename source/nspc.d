@@ -334,7 +334,7 @@ struct NSPCPlayer {
 		s.target = cast(ubyte) target;
 	}
 
-	private void slide(Slider* s) nothrow {
+	private void slide(ref Slider s) nothrow @safe {
 		if (s.cycles) {
 			if (--s.cycles == 0) {
 				s.cur = s.target << 8;
@@ -632,7 +632,7 @@ struct NSPCPlayer {
 		// 0D60
 		if (c.note.cycles) {
 			if (c.cur_port_start_ctr == 0) {
-				slide(&c.note);
+				slide(c.note);
 				calc_freq(c, c.note.cur);
 			} else {
 				c.cur_port_start_ctr--;
@@ -709,8 +709,8 @@ struct NSPCPlayer {
 
 		st.patpos++;
 
-		slide(&st.tempo);
-		slide(&st.volume);
+		slide(st.tempo);
+		slide(st.volume);
 
 		for (c = &st.chan[0]; c != &st.chan[8]; c++) {
 			if (c.ptr == null) {
@@ -718,7 +718,7 @@ struct NSPCPlayer {
 			}
 
 			// @ 0C40
-			slide(&c.volume);
+			slide(c.volume);
 
 			// @ 0C4D
 			int tphase = 0;
@@ -737,7 +737,7 @@ struct NSPCPlayer {
 			calc_total_vol(st, *c, cast(byte) tphase);
 
 			// 0C79
-			slide(&c.panning);
+			slide(c.panning);
 
 			// 0C86: volume stuff
 			calc_vol_2(c, c.panning.cur);
