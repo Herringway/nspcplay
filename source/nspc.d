@@ -624,7 +624,7 @@ struct NSPCPlayer {
 		pattop_state = state;
 	}
 
-	private void CF7(ref ChannelState c) nothrow @system {
+	private void CF7(ref ChannelState c) nothrow @safe {
 		if (c.note_release) {
 			c.note_release--;
 		}
@@ -766,9 +766,8 @@ struct NSPCPlayer {
 		}
 	}
 
-	private void do_sub_cycle(ref SongState st) nothrow @system {
-		ChannelState* c;
-		for (c = &st.chan[0]; c != &st.chan[8]; c++) {
+	private void do_sub_cycle(ref SongState st) nothrow @safe {
+		foreach (ref c; st.chan) {
 			if (c.ptr == null) {
 				continue;
 			}
@@ -778,7 +777,7 @@ struct NSPCPlayer {
 			if (c.tremolo_range && c.tremolo_start_ctr == c.tremolo_start) {
 				int p = c.tremolo_phase + sub_cycle_calc(st, c.tremolo_speed);
 				changed = true;
-				calc_total_vol(st, *c, cast(byte) p);
+				calc_total_vol(st, c, cast(byte) p);
 			}
 			int pan = c.panning.cur;
 			if (c.panning.cycles) {
@@ -786,7 +785,7 @@ struct NSPCPlayer {
 				changed = true;
 			}
 			if (changed) {
-				calc_vol_2(*c, pan);
+				calc_vol_2(c, pan);
 			}
 
 			changed = false;
@@ -797,11 +796,11 @@ struct NSPCPlayer {
 			}
 			if (c.cur_vib_range && c.vibrato_start_ctr == c.vibrato_start) {
 				int p = c.vibrato_phase + sub_cycle_calc(st, c.vibrato_speed);
-				note += calc_vib_disp(*c, p);
+				note += calc_vib_disp(c, p);
 				changed = true;
 			}
 			if (changed) {
-				calc_freq(*c, note);
+				calc_freq(c, note);
 			}
 		}
 	}
@@ -916,7 +915,7 @@ struct NSPCPlayer {
 		}
 	}
 
-	private void load_music(ubyte* packs_used, int spc_addr) @system {
+	private void load_music(ubyte[] packs_used, int spc_addr) @system {
 		packs_loaded[0] = packs_used[0];
 		packs_loaded[1] = packs_used[1];
 		load_songpack(packs_used[2]);
@@ -926,7 +925,7 @@ struct NSPCPlayer {
 
 	private void song_selected(int index) @system {
 		selected_bgm = index;
-		load_music(&pack_used[index][0], song_address[index]);
+		load_music(pack_used[index][], song_address[index]);
 	}
 
 	void load_instruments() nothrow @system {
@@ -956,7 +955,7 @@ struct NSPCPlayer {
 		initialize(mixrate);
 	}
 
-	void load_songpack(int new_pack) nothrow @system {
+	void load_songpack(int new_pack) nothrow @safe {
 		if (packs_loaded[2] == new_pack)
 			return;
 
