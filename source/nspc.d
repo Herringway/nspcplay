@@ -347,7 +347,7 @@ struct NSPCPlayer {
 			inst += st.first_CA_inst - 0xCA;
 		}
 
-		ubyte[] idata = spc[inst_base + 6 * inst .. inst_base + 6 * (inst + 1)];
+		const idata = spc[inst_base + 6 * inst .. inst_base + 6 * (inst + 1)];
 		if (inst < 0) {
 			assert(0, format!"instrument %X < 0"(inst));
 		}
