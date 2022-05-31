@@ -1227,10 +1227,13 @@ struct NSPCPlayer {
 			int decoding_start = start;
 			int times = 0;
 
+			short p0, p1;
 			do {
 				needs_another_loop = false;
 				for (int pos = decoding_start; pos < end; pos += BRR_BLOCK_SIZE) {
-					decode_brr_block(p[0 .. 16], [p[-2], p[-1]], spc[pos .. pos + BRR_BLOCK_SIZE], !!first_block);
+					decode_brr_block(p[0 .. 16], [p0, p1], spc[pos .. pos + BRR_BLOCK_SIZE], !!first_block);
+					p0 = p[14];
+					p1 = p[15];
 					p += 16;
 					first_block = false;
 				}
@@ -1239,8 +1242,8 @@ struct NSPCPlayer {
 					decoding_start = loop;
 
 					short[18] after_loop;
-					after_loop[0] = p[-2];
-					after_loop[1] = p[-1];
+					after_loop[0] = p0;
+					after_loop[1] = p1;
 
 					decode_brr_block(after_loop[2 .. 18], after_loop[0 .. 2], spc[loop .. loop + BRR_BLOCK_SIZE], false);
 					int full_loop_len = get_full_loop_len(samp[sn], after_loop[2 .. 4], (loop - start) / BRR_BLOCK_SIZE * 16);
