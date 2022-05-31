@@ -199,7 +199,7 @@ struct NSPCPlayer {
 	Instrument[] instruments;
 
 	void fill_buffer(short[2][] buffer) nothrow @system {
-		short[2]* bufp = &buffer[0];
+		size_t idx;
 		int bytes_left = cast(int)(buffer.length * 2 * short.sizeof);
 		while (bytes_left > 0) {
 			if ((state.next_timer_tick -= timer_speed) < 0) {
@@ -222,9 +222,8 @@ struct NSPCPlayer {
 
 				int ipos = state.chan[i].samp_pos >> 15;
 
-				Sample* s = state.chan[i].samp;
-				if (ipos > s.length) {
-					assert(0, format!"Sample position exceeds sample length! %d > %d"(ipos, s.length));
+				if (ipos > state.chan[i].samp.length) {
+					assert(0, format!"Sample position exceeds sample length! %d > %d"(ipos, state.chan[i].samp.length));
 				}
 
 				if (state.chan[i].note_release != 0) {
@@ -240,17 +239,17 @@ struct NSPCPlayer {
 					}
 				}
 				double volume = state.chan[i].env_height / 128.0;
-				assert(s.data);
-				int s1 = s.data[ipos];
-				s1 += (s.data[ipos + 1] - s1) * (state.chan[i].samp_pos & 0x7FFF) >> 15;
+				assert(state.chan[i].samp.data);
+				int s1 = state.chan[i].samp.data[ipos];
+				s1 += (state.chan[i].samp.data[ipos + 1] - s1) * (state.chan[i].samp_pos & 0x7FFF) >> 15;
 
 				left += cast(int)(s1 * state.chan[i].left_vol * volume);
 				right += cast(int)(s1 * state.chan[i].right_vol * volume);
 
 				state.chan[i].samp_pos += state.chan[i].note_freq;
-				if ((state.chan[i].samp_pos >> 15) >= s.length) {
-					if (s.loop_len) {
-						state.chan[i].samp_pos -= s.loop_len << 15;
+				if ((state.chan[i].samp_pos >> 15) >= state.chan[i].samp.length) {
+					if (state.chan[i].samp.loop_len) {
+						state.chan[i].samp_pos -= state.chan[i].samp.loop_len << 15;
 					} else {
 						state.chan[i].samp_pos = -1;
 					}
@@ -266,9 +265,9 @@ struct NSPCPlayer {
 			} else if (right > 32767) {
 				right = 32767;
 			}
-			(*bufp)[0] = cast(short) left;
-			(*bufp)[1] = cast(short) right;
-			bufp++;
+			buffer[idx][0] = cast(short) left;
+			buffer[idx][1] = cast(short) right;
+			idx++;
 			bytes_left -= 4;
 		}
 		bufs_used++;
