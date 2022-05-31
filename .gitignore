@@ -16,3 +16,4 @@ nspcplay-test-*
 dub.selections.json
 *.pdb
 *.dll
+.vs
