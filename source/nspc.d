@@ -1024,8 +1024,9 @@ struct NSPCPlayer {
 		// Get order length and repeat info (at this point, we don't know how
 		// many patterns there are, so the pattern pointers aren't validated yet)
 		ushort[] wp = cast(ushort[]) spc[start_addr .. $];
-		while (wp[0] >= 0x100)
+		while (wp[0] >= 0x100) {
 			wp = wp[1 .. $];
+		}
 		song.order.length = cast(int)(&wp[0] - cast(ushort*)&spc[start_addr]);
 		if (song.order.length == 0) {
 			throw new Exception("Order length is 0");
