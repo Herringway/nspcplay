@@ -1228,13 +1228,14 @@ struct NSPCPlayer {
 			int times = 0;
 
 			short p0, p1;
+			size_t idx;
 			do {
 				needs_another_loop = false;
 				for (int pos = decoding_start; pos < end; pos += BRR_BLOCK_SIZE) {
-					decode_brr_block(p[0 .. 16], [p0, p1], spc[pos .. pos + BRR_BLOCK_SIZE], !!first_block);
-					p0 = p[14];
-					p1 = p[15];
-					p += 16;
+					decode_brr_block(p[idx * 16 .. (idx + 1) * 16], [p0, p1], spc[pos .. pos + BRR_BLOCK_SIZE], !!first_block);
+					p0 = p[idx * 16 + 14];
+					p1 = p[idx * 16 + 15];
+					idx++;
 					first_block = false;
 				}
 
@@ -1253,7 +1254,7 @@ struct NSPCPlayer {
 						//printf("We need another loop! sample %02X (old loop start samples: %d %d)\n", (unsigned)sn,
 						//	samp[sn].data[sa.length - sa.loop_len],
 						//	samp[sn].data[sa.length - sa.loop_len + 1]);
-						ptrdiff_t diff = p - samp[sn].data;
+						ptrdiff_t diff = samp[sn].length;
 						short* new_stuff = cast(short*) realloc(samp[sn].data, (samp[sn].length + samp[sn].loop_len + 1) * short.sizeof);
 						if (new_stuff == null) {
 							debug {
@@ -1265,6 +1266,7 @@ struct NSPCPlayer {
 							}
 						}
 						p = new_stuff + diff;
+						idx = 0;
 						samp[sn].length += samp[sn].loop_len;
 						samp[sn].data = new_stuff;
 					} else {
@@ -1283,7 +1285,7 @@ struct NSPCPlayer {
 			}
 
 			// Put an extra sample at the end for easier interpolation
-			*p = samp[sn].loop_len != 0 ? samp[sn].data[samp[sn].length - samp[sn].loop_len] : 0;
+			p[idx * 16 + 1] = samp[sn].loop_len != 0 ? samp[sn].data[samp[sn].length - samp[sn].loop_len] : 0;
 		}
 	}
 
