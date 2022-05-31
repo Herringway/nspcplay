@@ -160,6 +160,14 @@ enum BRR_BLOCK_SIZE = 9;
 enum BRR_FLAG_END = 1;
 enum BRR_FLAG_LOOP = 2;
 
+struct Instrument {
+	align(1):
+	ubyte sampleID;
+	ubyte[3] adsr;
+	ubyte tuning;
+	ubyte tuningFraction;
+}
+
 struct NSPCPlayer {
 	Song cur_song;
 	SongState state;
@@ -172,7 +180,6 @@ struct NSPCPlayer {
 
 	int bufs_used;
 	ubyte[65536] spc;
-	int inst_base = 0x6E00;
 	Sample[128] samp;
 	private int pat_length;
 
@@ -188,6 +195,8 @@ struct NSPCPlayer {
 	int current_block = -1;
 
 	int selected_bgm;
+
+	Instrument[] instruments;
 
 	void fill_buffer(short[2][] buffer) nothrow @system {
 		short[2]* bufp = &buffer[0];
@@ -347,22 +356,22 @@ struct NSPCPlayer {
 			inst += st.first_CA_inst - 0xCA;
 		}
 
-		const idata = spc[inst_base + 6 * inst .. inst_base + 6 * (inst + 1)];
 		if (inst < 0) {
 			assert(0, format!"instrument %X < 0"(inst));
 		}
 		if (inst >= 64) {
 			assert(0, format!"instrument %X > 64"(inst));
 		}
-		if (!samp[idata[0]].data) {
+		const idata = instruments[inst];
+		if (!samp[idata.sampleID].data) {
 			assert(0, format!"no data for instrument %X"(inst));
 		}
-		if ((idata[4] == 0 && idata[5] == 0)) {
+		if ((idata.tuning == 0) && (idata.tuningFraction == 0)) {
 			assert(0, format!"bad inst %X"(inst));
 		}
 
 		c.inst = cast(ubyte) inst;
-		c.inst_adsr1 = idata[2];
+		c.inst_adsr1 = idata.adsr[1];
 		if (c.inst_adsr1 & 0x1F) {
 			int i = c.inst_adsr1 & 0x1F;
 			// calculate the constant to multiply envelope height by on each sample
@@ -399,8 +408,8 @@ struct NSPCPlayer {
 		freq <<= 1;
 		freq >>= 6 - octave;
 
-		ubyte[] inst_freq = spc[inst_base + 6 * c.inst + 4 .. inst_base + 6 * c.inst + 6];
-		freq *= (inst_freq[0] << 8 | inst_freq[1]);
+
+		freq *= (cast(ushort)instruments[c.inst].tuning << 8) + instruments[c.inst].tuningFraction;
 		freq >>= 8;
 		freq &= 0x3fff;
 
@@ -539,7 +548,7 @@ struct NSPCPlayer {
 			c.tremolo_start_ctr = 0;
 
 			c.samp_pos = 0;
-			c.samp = &samp[spc[inst_base + 6 * c.inst]];
+			c.samp = &samp[instruments[c.inst].sampleID];
 			c.env_height = 1;
 
 			note &= 0x7F;
@@ -939,9 +948,13 @@ struct NSPCPlayer {
 			}
 		}
 		decode_samples(spc[0x6C00 .. 0x6E00]);
-		inst_base = 0x6E00;
 		if (samp[0].data == null) {
 			song_playing = false;
+		}
+		enum inst_base = 0x6E00;
+		instruments.reserve(80);
+		foreach (instrument; cast(Instrument[])(spc[inst_base .. inst_base + 64 * Instrument.sizeof])) {
+			instruments ~= instrument;
 		}
 		initialize(mixrate);
 	}
