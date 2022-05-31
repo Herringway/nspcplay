@@ -209,7 +209,6 @@ struct NSPCPlayer {
 				}
 			}
 
-			//		for (int blah = 0; blah < 50; blah++) {
 			int left = 0, right = 0;
 			int i;
 			for (int cm = chmask; cm; i++, cm >>= 1) {
@@ -248,8 +247,6 @@ struct NSPCPlayer {
 				left += cast(int)(s1 * state.chan[i].left_vol * volume);
 				right += cast(int)(s1 * state.chan[i].right_vol * volume);
 
-				//			int sp = c.samp_pos;
-
 				state.chan[i].samp_pos += state.chan[i].note_freq;
 				if ((state.chan[i].samp_pos >> 15) >= s.length) {
 					if (s.loop_len) {
@@ -258,7 +255,6 @@ struct NSPCPlayer {
 						state.chan[i].samp_pos = -1;
 					}
 				}
-				//			if (blah != 1) c.samp_pos = sp;
 			}
 			if (left < -32768) {
 				left = -32768;
@@ -272,7 +268,6 @@ struct NSPCPlayer {
 			}
 			(*bufp)[0] = cast(short) left;
 			(*bufp)[1] = cast(short) right;
-			//		}
 			bufp++;
 			bytes_left -= 4;
 		}
