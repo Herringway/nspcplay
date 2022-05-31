@@ -608,13 +608,12 @@ struct NSPCPlayer {
 
 		int pat = cur_song.order[state.ordnum];
 
-		int ch;
-		for (ch = 0; ch < 8; ch++) {
-			state.chan[ch].ptr = cur_song.pattern[pat][ch].track;
-			state.chan[ch].sub_count = 0;
-			state.chan[ch].volume.cycles = 0;
-			state.chan[ch].panning.cycles = 0;
-			state.chan[ch].next = 0;
+		foreach (idx, ref channel; state.chan[0 .. 8]) {
+			channel.ptr = cur_song.pattern[pat][idx].track;
+			channel.sub_count = 0;
+			channel.volume.cycles = 0;
+			channel.panning.cycles = 0;
+			channel.next = 0;
 		}
 		state.patpos = 0;
 
@@ -661,16 +660,13 @@ struct NSPCPlayer {
 
 	// $07F9 + $0625
 	private bool do_cycle(ref SongState st) nothrow @system {
-		int ch;
-		ChannelState* c;
-		for (ch = 0; ch < 8; ch++) {
-			c = &st.chan[ch];
+		foreach (ref c; st.chan[0 .. 8]) {
 			if (c.ptr == null) {
 				continue; //8F0
 			}
 
 			if (--c.next >= 0) {
-				CF7(*c);
+				CF7(c);
 			} else
 				while (1) {
 					const(ubyte)* p = c.ptr;
@@ -692,15 +688,15 @@ struct NSPCPlayer {
 					} else if (*p < 0xE0) {
 						c.ptr++;
 						c.next = c.note_len - 1;
-						do_note(st, *c, *p);
+						do_note(st, c, *p);
 						break;
 					} else { // E0-FF
-						do_command(st, *c);
+						do_command(st, c);
 					}
 				}
 			// $0B84
 			if (c.note.cycles == 0 && *c.ptr == 0xF9) {
-				do_command(st, *c);
+				do_command(st, c);
 			}
 		}
 
@@ -709,7 +705,7 @@ struct NSPCPlayer {
 		st.tempo.slide();
 		st.volume.slide();
 
-		for (c = &st.chan[0]; c != &st.chan[8]; c++) {
+		foreach (ref c; st.chan[0 .. 8]) {
 			if (c.ptr == null) {
 				continue;
 			}
@@ -731,13 +727,13 @@ struct NSPCPlayer {
 					c.tremolo_start_ctr++;
 				}
 			}
-			calc_total_vol(st, *c, cast(byte) tphase);
+			calc_total_vol(st, c, cast(byte) tphase);
 
 			// 0C79
 			c.panning.slide();
 
 			// 0C86: volume stuff
-			calc_vol_2(*c, c.panning.cur);
+			calc_vol_2(c, c.panning.cur);
 		}
 		return true;
 	}
@@ -745,10 +741,9 @@ struct NSPCPlayer {
 	bool do_cycle_no_sound(ref SongState st) nothrow @system {
 		bool ret = do_cycle(st);
 		if (ret) {
-			int ch;
-			for (ch = 0; ch < 8; ch++) {
-				if (st.chan[ch].note_release == 0) {
-					st.chan[ch].samp_pos = -1;
+			foreach (ref ch; st.chan[0 .. 8]) {
+				if (ch.note_release == 0) {
+					ch.samp_pos = -1;
 				}
 			}
 		}
@@ -764,7 +759,7 @@ struct NSPCPlayer {
 	}
 
 	private void do_sub_cycle(ref SongState st) nothrow @safe {
-		foreach (ref c; st.chan) {
+		foreach (ref c; st.chan[0 .. 8]) {
 			if (c.ptr == null) {
 				continue;
 			}
@@ -854,17 +849,16 @@ struct NSPCPlayer {
 
 		auto packs = read!(PackPtr[NUM_PACKS])(romData, BGM_PACK_TABLE + pack_used.sizeof);
 		// pack pointer table follows immediately after
-		for (int i = 0; i < NUM_PACKS; i++) {
-			rom_packs[i].start_address = (packs[i].bank << 16) + packs[i].nearAddr;
+		foreach (idx, ref romPack; rom_packs) {
+			romPack.start_address = (packs[idx].bank << 16) + packs[idx].nearAddr;
 		}
 
 		song_address = read!(typeof(song_address))(romData, SONG_POINTER_TABLE);
 
-		for (int i = 0; i < NUM_PACKS; i++) {
+		foreach (idx, ref rp; rom_packs) {
 			int size;
 			Block[] blocks;
 			bool valid = true;
-			Pack* rp = &rom_packs[i];
 
 			int offset = rp.start_address - 0xC00000;
 			if (offset >= romData.length) {
@@ -897,7 +891,7 @@ struct NSPCPlayer {
 				spc[spc_addr .. spc_addr + size] = romData[offset + 4 .. offset + 4 + size];
 			}
 			rp.blocks = blocks;
-			inmem_packs[i].status = 0;
+			inmem_packs[idx].status = 0;
 		}
 		return true;
 	}
@@ -907,8 +901,8 @@ struct NSPCPlayer {
 	}
 
 	void free_samples() nothrow @safe {
-		for (int sn = 0; sn < 128; sn++) {
-			samp[sn].data = null;
+		foreach (ref sample; samp) {
+			sample.data = null;
 		}
 	}
 
@@ -1102,13 +1096,13 @@ struct NSPCPlayer {
 		// Now the number of patterns is known, so go back and get the order
 		song.order = new int[](song.order.length);
 		wp = cast(ushort[]) spc[start_addr .. $];
-		for (int i = 0; i < song.order.length; i++) {
+		foreach (ref order; song.order) {
 			int pat = wp[0] - first_pattern;
 			wp = wp[1 .. $];
 			if (pat < 0 || pat >= pat_bytes || pat & 15) {
 				throw new Exception(format!"Bad pattern pointer: %x"(pat + first_pattern));
 			}
-			song.order[i] = pat >> 4;
+			order = pat >> 4;
 		}
 
 		sub_table = null;
