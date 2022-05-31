@@ -189,9 +189,6 @@ struct NSPCPlayer {
 
 	int selected_bgm;
 
-	char[60] errbuf;
-	string decomp_error;
-
 	void fill_buffer(short[2][] buffer) nothrow @system {
 		short[2]* bufp = &buffer[0];
 		int bytes_left = cast(int)(buffer.length * 2 * short.sizeof);
