@@ -83,7 +83,7 @@ struct ChannelState {
 	ubyte tremolo_phase;
 	ubyte tremolo_start_ctr;
 
-	Sample* samp;
+	Sample samp;
 	int samp_pos = -1;
 	int note_freq;
 
@@ -542,7 +542,7 @@ struct NSPCPlayer {
 			c.tremolo_start_ctr = 0;
 
 			c.samp_pos = 0;
-			c.samp = &samp[instruments[c.inst].sampleID];
+			c.samp = samp[instruments[c.inst].sampleID];
 			c.env_height = 1;
 
 			note &= 0x7F;
@@ -1189,12 +1189,11 @@ struct NSPCPlayer {
 
 	void decode_samples(const(ubyte)[] ptrtable) nothrow @system {
 		for (uint sn = 0; sn < 128; sn++) {
-			Sample* sa = &samp[sn];
 			int start = ptrtable[0] | (ptrtable[1] << 8);
 			int loop = ptrtable[2] | (ptrtable[3] << 8);
 			ptrtable = ptrtable[4 .. $];
 
-			sa.data = null;
+			samp[sn].data = null;
 			if (start == 0 || start == 0xffff) {
 				continue;
 			}
@@ -1205,26 +1204,23 @@ struct NSPCPlayer {
 			}
 
 			int end = start + length;
-			sa.length = (length / BRR_BLOCK_SIZE) * 16;
+			samp[sn].length = (length / BRR_BLOCK_SIZE) * 16;
 			// The LOOP bit only matters for the last brr block
 			if (spc[start + length - BRR_BLOCK_SIZE] & BRR_FLAG_LOOP) {
 				if (loop < start || loop >= end) {
 					continue;
 				}
-				sa.loop_len = ((end - loop) / BRR_BLOCK_SIZE) * 16;
+				samp[sn].loop_len = ((end - loop) / BRR_BLOCK_SIZE) * 16;
 			} else
-				sa.loop_len = 0;
+				samp[sn].loop_len = 0;
 
-			size_t allocation_size = sa.length + 1;
+			size_t allocation_size = samp[sn].length + 1;
 
 			short* p = cast(short*) malloc(allocation_size * short.sizeof);
 			if (!p) {
 				debug assert(0, "malloc failed in BRR decoding");
 			}
-			/*		printf("Sample %2d: %04X(%04X)-%04X length %d looplen %d\n",
-				sn, start, loop, end, sa.length, sa.loop_len);*/
-
-			sa.data = p;
+			samp[sn].data = p;
 
 			int needs_another_loop;
 			int first_block = true;
@@ -1239,7 +1235,7 @@ struct NSPCPlayer {
 					first_block = false;
 				}
 
-				if (sa.loop_len != 0) {
+				if (samp[sn].loop_len != 0) {
 					decoding_start = loop;
 
 					short[18] after_loop;
@@ -1247,15 +1243,15 @@ struct NSPCPlayer {
 					after_loop[1] = p[-1];
 
 					decode_brr_block(after_loop[2 .. 18], after_loop[0 .. 2], spc[loop .. loop + BRR_BLOCK_SIZE], false);
-					int full_loop_len = get_full_loop_len(*sa, after_loop[2 .. 4], (loop - start) / BRR_BLOCK_SIZE * 16);
+					int full_loop_len = get_full_loop_len(samp[sn], after_loop[2 .. 4], (loop - start) / BRR_BLOCK_SIZE * 16);
 
 					if (full_loop_len == -1) {
 						needs_another_loop = true;
 						//printf("We need another loop! sample %02X (old loop start samples: %d %d)\n", (unsigned)sn,
-						//	sa.data[sa.length - sa.loop_len],
-						//	sa.data[sa.length - sa.loop_len + 1]);
-						ptrdiff_t diff = p - sa.data;
-						short* new_stuff = cast(short*) realloc(sa.data, (sa.length + sa.loop_len + 1) * short.sizeof);
+						//	samp[sn].data[sa.length - sa.loop_len],
+						//	samp[sn].data[sa.length - sa.loop_len + 1]);
+						ptrdiff_t diff = p - samp[sn].data;
+						short* new_stuff = cast(short*) realloc(samp[sn].data, (samp[sn].length + samp[sn].loop_len + 1) * short.sizeof);
 						if (new_stuff == null) {
 							debug {
 								assert(0, "realloc failed in BRR decoding");
@@ -1266,10 +1262,10 @@ struct NSPCPlayer {
 							}
 						}
 						p = new_stuff + diff;
-						sa.length += sa.loop_len;
-						sa.data = new_stuff;
+						samp[sn].length += samp[sn].loop_len;
+						samp[sn].data = new_stuff;
 					} else {
-						sa.loop_len = full_loop_len;
+						samp[sn].loop_len = full_loop_len;
 						// needs_another_loop is already false
 					}
 				}
@@ -1284,7 +1280,7 @@ struct NSPCPlayer {
 			}
 
 			// Put an extra sample at the end for easier interpolation
-			*p = sa.loop_len != 0 ? sa.data[sa.length - sa.loop_len] : 0;
+			*p = samp[sn].loop_len != 0 ? samp[sn].data[samp[sn].length - samp[sn].loop_len] : 0;
 		}
 	}
 
