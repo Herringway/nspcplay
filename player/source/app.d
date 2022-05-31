@@ -67,14 +67,15 @@ int main(string[] args) {
 	//nspc.loadSong(file);
 	nspc.open_rom(file);
 
+	nspc.play();
+	trace("Playing NSPC music");
+
 	// Prepare to play music
 	if (!initAudio(&_sampling_func, channels, sampleRate, &nspc)) {
 		return 1;
 	}
 	trace("SDL audio init success");
 
-	nspc.play();
-	trace("Playing NSPC music");
 
 	writeln("Press enter to exit");
 	readln();
