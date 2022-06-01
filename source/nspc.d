@@ -7,7 +7,7 @@ import std.exception;
 import std.format;
 
 struct SongState {
-	ChannelState[16] chan;
+	ChannelState[8] chan;
 	byte transpose;
 	Slider volume = Slider(0xC000);
 	Slider tempo = Slider(0x2000);
@@ -603,7 +603,7 @@ struct NSPCPlayer {
 
 		int pat = cur_song.order[state.ordnum];
 
-		foreach (idx, ref channel; state.chan[0 .. 8]) {
+		foreach (idx, ref channel; state.chan) {
 			channel.ptr = cur_song.pattern[pat][idx].track;
 			channel.sub_count = 0;
 			channel.volume.cycles = 0;
@@ -653,7 +653,7 @@ struct NSPCPlayer {
 
 	// $07F9 + $0625
 	private bool do_cycle(ref SongState st) nothrow @system {
-		foreach (ref c; st.chan[0 .. 8]) {
+		foreach (ref c; st.chan) {
 			if (c.ptr == null) {
 				continue; //8F0
 			}
@@ -698,7 +698,7 @@ struct NSPCPlayer {
 		st.tempo.slide();
 		st.volume.slide();
 
-		foreach (ref c; st.chan[0 .. 8]) {
+		foreach (ref c; st.chan) {
 			if (c.ptr == null) {
 				continue;
 			}
@@ -734,7 +734,7 @@ struct NSPCPlayer {
 	bool do_cycle_no_sound(ref SongState st) nothrow @system {
 		bool ret = do_cycle(st);
 		if (ret) {
-			foreach (ref ch; st.chan[0 .. 8]) {
+			foreach (ref ch; st.chan) {
 				if (ch.note_release == 0) {
 					ch.samp_pos = -1;
 				}
@@ -752,7 +752,7 @@ struct NSPCPlayer {
 	}
 
 	private void do_sub_cycle(ref SongState st) nothrow @safe {
-		foreach (ref c; st.chan[0 .. 8]) {
+		foreach (ref c; st.chan) {
 			if (c.ptr == null) {
 				continue;
 			}
