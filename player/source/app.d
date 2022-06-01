@@ -1,6 +1,7 @@
 import nspc;
 
 import std.algorithm.comparison;
+import std.conv;
 import std.experimental.logger;
 import std.exception;
 import std.file;
@@ -50,9 +51,32 @@ extern (C) void _sampling_func(void* user, ubyte* buf, int bufSize) nothrow {
 int main(string[] args) {
 	ushort instrumentBase = 0x6E00;
 	ushort sampleBase = 0x6C00;
+	ushort songBase = 0;
+	void handleIntegers(string opt, string value) {
+		ushort val;
+		if (value.startsWith("0x")) {
+			val = value[2 .. $].to!ushort(16);
+		} else {
+			val = value.to!ushort(10);
+		}
+		switch (opt) {
+			case "i|instrumentbase":
+				instrumentBase = val;
+				break;
+			case "s|samplebase":
+				sampleBase = val;
+				break;
+			case "z|songbase":
+				songBase = val;
+				break;
+			default:
+				throw new Exception("Unknown option "~opt);
+		}
+	}
 	auto help = getopt(args,
-		"i|instrumentbase", &instrumentBase,
-		"s|samplebase", &sampleBase,
+		"i|instrumentbase", &handleIntegers,
+		"s|samplebase", &handleIntegers,
+		"z|songbase", &handleIntegers,
 	);
 	enum channels = 2;
 	enum sampleRate = 44100;
@@ -76,7 +100,11 @@ int main(string[] args) {
 	trace("Loading NSPC file");
 	// Load files
 	nspc.loadInstruments(instrumentPacks, instrumentBase, sampleBase);
-	nspc.loadSequencePack(file);
+	if (songBase != 0) {
+		nspc.loadSequencePack(file, songBase);
+	} else {
+		nspc.loadSequencePack(file);
+	}
 
 	nspc.play();
 	trace("Playing NSPC music");

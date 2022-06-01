@@ -783,35 +783,42 @@ struct NSPCPlayer {
 		song_playing = true;
 	}
 
+	void loadSequencePack(const(ubyte)[] data, ushort base) @system {
+		loadSequence(data, base);
+	}
 	void loadSequencePack(const(ubyte)[] data) @system {
-		ushort size = (cast(const(ushort)[])(data[0 .. 2]))[0];
 		ushort base = (cast(const(ushort)[])(data[2 .. 4]))[0];
-		assert(data.length - 4 == size);
-		loadSequence(data[4 .. $], base);
+		loadSequence(data, base);
 	}
 	void loadSequence(const(ubyte)[] data, ushort base) @system {
 		ubyte[65536] buffer;
-		buffer[base .. base + data.length] = data[];
+		loadAllSubpacks(buffer, data);
 		decompile_song(buffer[], cur_song, base, cast(int)(base + data.length));
 	}
 	void loadInstruments(const(ubyte)[][] packs, ushort instrumentBase, ushort sampleBase) @system {
 		ubyte[65536] buffer;
 		foreach (pack; packs) {
-			ushort size, base;
-			while (true) {
-				size = (cast(const(ushort)[])(pack[0 .. 2]))[0];
-				if (size == 0) {
-					break;
-				}
-				base = (cast(const(ushort)[])(pack[2 .. 4]))[0];
-				buffer[base .. base + size] = pack[4 .. size + 4];
-				pack = pack[size + 4 .. $];
-			}
+			loadAllSubpacks(buffer[], pack);
 			decode_samples(buffer, buffer[sampleBase .. sampleBase + 0x200]);
 		}
 		instruments.reserve(80);
 		foreach (instrument; cast(Instrument[])(buffer[instrumentBase .. instrumentBase + 64 * Instrument.sizeof])) {
 			instruments ~= instrument;
+		}
+	}
+	void loadAllSubpacks(ubyte[] buffer, const(ubyte)[] pack) {
+		ushort size, base;
+		while (true) {
+			if (pack.length == 0) {
+				break;
+			}
+			size = (cast(const(ushort)[])(pack[0 .. 2]))[0];
+			if (size == 0) {
+				break;
+			}
+			base = (cast(const(ushort)[])(pack[2 .. 4]))[0];
+			buffer[base .. base + size] = pack[4 .. size + 4];
+			pack = pack[size + 4 .. $];
 		}
 	}
 
