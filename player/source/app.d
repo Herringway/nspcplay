@@ -65,7 +65,7 @@ int main(string[] args) {
 	trace("Loading NSPC file");
 	// Load file
 	//nspc.loadSong(file);
-	nspc.open_rom(file);
+	nspc.open_rom(file, 91);
 
 	nspc.play();
 	trace("Playing NSPC music");

@@ -5,7 +5,6 @@ import core.stdc.stdlib;
 import core.stdc.string;
 import std.exception;
 import std.format;
-import std.experimental.allocator;
 
 struct SongState {
 	ChannelState[16] chan;
@@ -820,14 +819,14 @@ struct NSPCPlayer {
 
 	void play() @system {
 		song_playing = true;
-		song_selected(91);
 	}
 
 	void loadSong(ubyte[] data) @safe {
 
 	}
 
-	bool open_rom(const(ubyte)[] data) @safe {
+	bool open_rom(const(ubyte)[] data, ubyte songID) @system {
+		song_playing = false;
 		romData = data;
 		if (romData.length < 0x300000) {
 			assert(0, "An EarthBound ROM must be at least 3 MB");
@@ -884,13 +883,8 @@ struct NSPCPlayer {
 			rp.blocks = blocks;
 			inmem_packs[idx].status = 0;
 		}
+		load_music(pack_used[songID][], song_address[songID]);
 		return true;
-	}
-
-	void free_samples() nothrow @safe {
-		foreach (ref sample; samp) {
-			sample.data = null;
-		}
 	}
 
 	private void load_music(ubyte[] packs_used, int spc_addr) @system {
@@ -932,12 +926,7 @@ struct NSPCPlayer {
 		load_instruments(packs_used[0 .. 2]);
 	}
 
-	private void song_selected(int index) @system {
-		load_music(pack_used[index][], song_address[index]);
-	}
-
 	void load_instruments(ubyte[] packs) nothrow @system {
-		free_samples();
 		spc[] = 0;
 		foreach (p; packs) {
 			if (p >= NUM_PACKS) {
