@@ -823,7 +823,7 @@ struct NSPCPlayer {
 				break;
 			}
 			base = (cast(const(ushort)[])(pack[2 .. 4]))[0];
-			infof("Loading subpack to %X (%s bytes)", base, size);
+			tracef("Loading subpack to %X (%s bytes)", base, size);
 			buffer[base .. base + size] = pack[4 .. size + 4];
 			pack = pack[size + 4 .. $];
 		}
@@ -832,7 +832,7 @@ struct NSPCPlayer {
 	void loadNSPCFile(const(ubyte)[] data) @system {
 		ubyte[65536] buffer;
 		auto header = (cast(const(NSPCFileHeader)[])(data[0 .. NSPCFileHeader.sizeof]))[0];
-		infof("Loading NSPC - so: %X, i: %X, sa: %X", header.songBase, header.instrumentBase, header.sampleBase);
+		tracef("Loading NSPC - so: %X, i: %X, sa: %X", header.songBase, header.instrumentBase, header.sampleBase);
 		loadAllSubpacks(buffer[], data[NSPCFileHeader.sizeof .. $]);
 		processInstruments(buffer, header.instrumentBase, header.sampleBase);
 		decompile_song(buffer[], cur_song, header.songBase, cast(int)(header.songBase + data.length));
