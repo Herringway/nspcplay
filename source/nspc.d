@@ -4,6 +4,7 @@ import core.stdc.math;
 import core.stdc.stdlib;
 import core.stdc.string;
 import std.exception;
+import std.experimental.logger;
 import std.format;
 
 struct SongState {
@@ -138,6 +139,15 @@ struct Instrument {
 	ubyte[3] adsr;
 	ubyte tuning;
 	ubyte tuningFraction;
+}
+
+struct NSPCFileHeader {
+	align(1):
+	uint variant;
+	ushort songBase;
+	ushort instrumentBase;
+	ushort sampleBase;
+	ubyte[22] reserved;
 }
 
 struct NSPCPlayer {
@@ -799,14 +809,10 @@ struct NSPCPlayer {
 		ubyte[65536] buffer;
 		foreach (pack; packs) {
 			loadAllSubpacks(buffer[], pack);
-			decode_samples(buffer, buffer[sampleBase .. sampleBase + 0x200]);
 		}
-		instruments.reserve(80);
-		foreach (instrument; cast(Instrument[])(buffer[instrumentBase .. instrumentBase + 64 * Instrument.sizeof])) {
-			instruments ~= instrument;
-		}
+		processInstruments(buffer, instrumentBase, sampleBase);
 	}
-	void loadAllSubpacks(ubyte[] buffer, const(ubyte)[] pack) {
+	void loadAllSubpacks(ubyte[] buffer, const(ubyte)[] pack) @safe {
 		ushort size, base;
 		while (true) {
 			if (pack.length == 0) {
@@ -817,8 +823,26 @@ struct NSPCPlayer {
 				break;
 			}
 			base = (cast(const(ushort)[])(pack[2 .. 4]))[0];
+			infof("Loading subpack to %X (%s bytes)", base, size);
 			buffer[base .. base + size] = pack[4 .. size + 4];
 			pack = pack[size + 4 .. $];
+		}
+	}
+
+	void loadNSPCFile(const(ubyte)[] data) @system {
+		ubyte[65536] buffer;
+		auto header = (cast(const(NSPCFileHeader)[])(data[0 .. NSPCFileHeader.sizeof]))[0];
+		infof("Loading NSPC - so: %X, i: %X, sa: %X", header.songBase, header.instrumentBase, header.sampleBase);
+		loadAllSubpacks(buffer[], data[NSPCFileHeader.sizeof .. $]);
+		processInstruments(buffer, header.instrumentBase, header.sampleBase);
+		decompile_song(buffer[], cur_song, header.songBase, cast(int)(header.songBase + data.length));
+	}
+
+	void processInstruments(ubyte[] buffer, ushort instrumentBase, ushort sampleBase) @system {
+		decode_samples(buffer, buffer[sampleBase .. sampleBase + 0x200]);
+		instruments.reserve(80);
+		foreach (instrument; cast(Instrument[])(buffer[instrumentBase .. instrumentBase + 64 * Instrument.sizeof])) {
+			instruments ~= instrument;
 		}
 	}
 

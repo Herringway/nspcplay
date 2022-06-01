@@ -49,35 +49,6 @@ extern (C) void _sampling_func(void* user, ubyte* buf, int bufSize) nothrow {
 }
 
 int main(string[] args) {
-	ushort instrumentBase = 0x6E00;
-	ushort sampleBase = 0x6C00;
-	ushort songBase = 0;
-	void handleIntegers(string opt, string value) {
-		ushort val;
-		if (value.startsWith("0x")) {
-			val = value[2 .. $].to!ushort(16);
-		} else {
-			val = value.to!ushort(10);
-		}
-		switch (opt) {
-			case "i|instrumentbase":
-				instrumentBase = val;
-				break;
-			case "s|samplebase":
-				sampleBase = val;
-				break;
-			case "z|songbase":
-				songBase = val;
-				break;
-			default:
-				throw new Exception("Unknown option "~opt);
-		}
-	}
-	auto help = getopt(args,
-		"i|instrumentbase", &handleIntegers,
-		"s|samplebase", &handleIntegers,
-		"z|songbase", &handleIntegers,
-	);
 	enum channels = 2;
 	enum sampleRate = 44100;
 	if (args.length < 2) {
@@ -87,10 +58,6 @@ int main(string[] args) {
 
 	auto filePath = args[1];
 	auto file = cast(ubyte[])read(args[1]);
-	const(ubyte)[][] instrumentPacks;
-	foreach (arg; args[2 .. $]) {
-		instrumentPacks ~= cast(const(ubyte)[])read(arg);
-	}
 
 	NSPCPlayer nspc;
 	// initialization
@@ -99,12 +66,7 @@ int main(string[] args) {
 
 	trace("Loading NSPC file");
 	// Load files
-	nspc.loadInstruments(instrumentPacks, instrumentBase, sampleBase);
-	if (songBase != 0) {
-		nspc.loadSequencePack(file, songBase);
-	} else {
-		nspc.loadSequencePack(file);
-	}
+	nspc.loadNSPCFile(file);
 
 	nspc.play();
 	trace("Playing NSPC music");
