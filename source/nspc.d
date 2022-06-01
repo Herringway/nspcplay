@@ -172,7 +172,6 @@ struct Instrument {
 struct NSPCPlayer {
 	Song cur_song;
 	SongState state;
-	SongState pattop_state;
 	int mixrate = 44100;
 	int chmask = 255;
 	int timer_speed = 500;
@@ -188,11 +187,8 @@ struct NSPCPlayer {
 	Pack[NUM_PACKS] rom_packs;
 	Pack[NUM_PACKS] inmem_packs;
 
-	int area_count;
 	ubyte[3] packs_loaded = [0xFF, 0xFF, 0xFF];
 	int current_block = -1;
-
-	int selected_bgm;
 
 	Instrument[] instruments;
 
@@ -616,8 +612,6 @@ struct NSPCPlayer {
 			channel.next = 0;
 		}
 		state.patpos = 0;
-
-		pattop_state = state;
 	}
 
 	private void CF7(ref ChannelState c) nothrow @safe {
@@ -819,7 +813,6 @@ struct NSPCPlayer {
 		if (cur_song.order.length) {
 			load_pattern();
 		} else {
-			pattop_state = state;
 			song_playing = false;
 		}
 		mixrate = sampleRate;
@@ -940,7 +933,6 @@ struct NSPCPlayer {
 	}
 
 	private void song_selected(int index) @system {
-		selected_bgm = index;
 		load_music(pack_used[index][], song_address[index]);
 	}
 
@@ -975,7 +967,7 @@ struct NSPCPlayer {
 	}
 
 
-	Pack* load_pack(int pack_) nothrow @safe {
+	void load_pack(int pack_) nothrow @safe {
 		Pack* mp = &inmem_packs[pack_];
 		if (!(mp.status & IPACK_INMEM)) {
 			Pack* rp = &rom_packs[pack_];
@@ -991,8 +983,6 @@ struct NSPCPlayer {
 			}
 			mp.status |= IPACK_INMEM;
 		}
-
-		return mp;
 	}
 
 	void decompile_song(ref Song song, int start_addr, int end_addr) @system {
