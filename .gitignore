@@ -17,3 +17,5 @@ dub.selections.json
 *.pdb
 *.dll
 .vs
+*.nspc
+*.ebm
