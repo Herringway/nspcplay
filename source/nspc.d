@@ -176,18 +176,7 @@ struct NSPCPlayer {
 	int timer_speed = 500;
 	bool song_playing;
 
-	ubyte[65536] spc;
 	Sample[128] samp;
-
-	const(ubyte)[] romData;
-
-	ubyte[3][NUM_SONGS] pack_used;
-	ushort[NUM_SONGS] song_address;
-	Pack[NUM_PACKS] rom_packs;
-	Pack[NUM_PACKS] inmem_packs;
-
-	ubyte[3] packs_loaded = [0xFF, 0xFF, 0xFF];
-	int current_block = -1;
 
 	Instrument[] instruments;
 
@@ -315,7 +304,7 @@ struct NSPCPlayer {
 	}
 
 	private int calc_vol_3(const ChannelState c, int pan, int flag) nothrow @safe {
-		static immutable ubyte[21] pan_table = [0x00, 0x01, 0x03, 0x07, 0x0D, 0x15, 0x1E, 0x29, 0x34, 0x42, 0x51, 0x5E, 0x67, 0x6E, 0x73, 0x77, 0x7A, 0x7C, 0x7D, 0x7E, 0x7F];
+		static immutable ubyte[] pan_table = [0x00, 0x01, 0x03, 0x07, 0x0D, 0x15, 0x1E, 0x29, 0x34, 0x42, 0x51, 0x5E, 0x67, 0x6E, 0x73, 0x77, 0x7A, 0x7C, 0x7D, 0x7E, 0x7F, 0x7F];
 		const ubyte[] ph = pan_table[pan >> 8 .. (pan >> 8) + 2];
 		int v = ph[0] + ((ph[1] - ph[0]) * (pan & 255) >> 8);
 		v = v * c.total_vol >> 8;
@@ -818,163 +807,43 @@ struct NSPCPlayer {
 	}
 
 	void play() @system {
+		initialize(mixrate);
 		song_playing = true;
 	}
 
-	void loadSong(ubyte[] data) @safe {
-
+	void loadSequencePack(const(ubyte)[] data) @system {
+		ushort size = (cast(const(ushort)[])(data[0 .. 2]))[0];
+		ushort base = (cast(const(ushort)[])(data[2 .. 4]))[0];
+		assert(data.length - 4 == size);
+		loadSequence(data[4 .. $], base);
 	}
-
-	bool open_rom(const(ubyte)[] data, ubyte songID) @system {
-		song_playing = false;
-		romData = data;
-		if (romData.length < 0x300000) {
-			assert(0, "An EarthBound ROM must be at least 3 MB");
-		}
-
-		pack_used = read!(typeof(pack_used))(romData, BGM_PACK_TABLE);
-		static align(1) struct PackPtr {
-		align(1):
-			ubyte bank;
-			ushort nearAddr;
-		}
-
-		auto packs = read!(PackPtr[NUM_PACKS])(romData, BGM_PACK_TABLE + pack_used.sizeof);
-		// pack pointer table follows immediately after
-		foreach (idx, ref romPack; rom_packs) {
-			romPack.start_address = (packs[idx].bank << 16) + packs[idx].nearAddr;
-		}
-
-		song_address = read!(typeof(song_address))(romData, SONG_POINTER_TABLE);
-
-		foreach (idx, ref rp; rom_packs) {
-			int size;
-			Block[] blocks;
-			bool valid = true;
-
-			int offset = rp.start_address - 0xC00000;
-			enforce(offset < romData.length, "Attempted to read past end of ROM!");
-
-			while ((size = read!ushort(romData, offset)) > 0) {
-				int spc_addr = read!ushort(romData, offset + 2);
-				if (spc_addr + size > 0x10000) {
-					valid = false;
+	void loadSequence(const(ubyte)[] data, ushort base) @system {
+		ubyte[65536] buffer;
+		buffer[base .. base + data.length] = data[];
+		decompile_song(buffer[], cur_song, base, cast(int)(base + data.length));
+	}
+	void loadInstruments(const(ubyte)[][] packs, ushort instrumentBase, ushort sampleBase) @system {
+		ubyte[65536] buffer;
+		foreach (pack; packs) {
+			ushort size, base;
+			while (true) {
+				size = (cast(const(ushort)[])(pack[0 .. 2]))[0];
+				if (size == 0) {
 					break;
 				}
-				offset += 4 + size;
-				if (offset > romData.length) {
-					valid = false;
-					break;
-				}
-
-				blocks.length++;
-				blocks[$ - 1].size = cast(ushort) size;
-				blocks[$ - 1].spc_address = cast(ushort) spc_addr;
-
-				/*			if (spc_addr == 0x0500) {
-					int back = ftell(f);
-					fseek(f, 0x2E4A - 0x500, SEEK_CUR);
-					fread(song_address, NUM_SONGS, 2, f);
-					fseek(f, back, SEEK_SET);
-				}*/
-
-				spc[spc_addr .. spc_addr + size] = romData[offset + 4 .. offset + 4 + size];
+				base = (cast(const(ushort)[])(pack[2 .. 4]))[0];
+				buffer[base .. base + size] = pack[4 .. size + 4];
+				pack = pack[size + 4 .. $];
 			}
-			rp.blocks = blocks;
-			inmem_packs[idx].status = 0;
+			decode_samples(buffer, buffer[sampleBase .. sampleBase + 0x200]);
 		}
-		load_music(pack_used[songID][], song_address[songID]);
-		return true;
-	}
-
-	private void load_music(ubyte[] packs_used, int spc_addr) @system {
-		packs_loaded[0] = packs_used[0];
-		packs_loaded[1] = packs_used[1];
-
-		if (packs_loaded[2] != packs_used[2]) {
-			// Unload the current songpack unless it has been changed
-			if (packs_loaded[2] < NUM_PACKS) {
-				Pack* old = &inmem_packs[packs_loaded[2]];
-				if (!(old.status & IPACK_CHANGED)) {
-					old.status = 0;
-				}
-			}
-
-			packs_loaded[2] = cast(ubyte) packs_used[2];
-			if (packs_used[2] < NUM_PACKS) {
-				load_pack(packs_used[2]);
-			}
-		}
-		int bnum = -1;
-		if (packs_loaded[2] < NUM_PACKS) {
-			Pack* p = &inmem_packs[packs_loaded[2]];
-			for (bnum = cast(int) p.blocks.length - 1; bnum >= 0; bnum--) {
-				Block* b = &p.blocks[bnum];
-				if (cast(uint)(spc_addr - b.spc_address) < b.size) {
-					break;
-				}
-			}
-		}
-		current_block = bnum;
-		Block* b = get_cur_block();
-		if (b != null) {
-			spc[b.spc_address .. b.spc_address + b.size] = b.data[0 .. b.size];
-			decompile_song(cur_song, b.spc_address, b.spc_address + b.size);
-		}
-		initialize(mixrate);
-
-		load_instruments(packs_used[0 .. 2]);
-	}
-
-	void load_instruments(ubyte[] packs) nothrow @system {
-		spc[] = 0;
-		foreach (p; packs) {
-			if (p >= NUM_PACKS) {
-				continue;
-			}
-			int addr, size;
-			auto base = rom_packs[p].start_address - 0xC00000;
-			while ((size = (cast(const(ushort)[])(romData[base .. base + 2]))[0]) != 0) {
-				addr = (cast(const(ushort)[])(romData[base + 2 .. base + 4]))[0];
-				if (size + addr >= 0x10000) {
-					assert(0, "Invalid SPC block");
-				}
-				spc[addr .. addr + size] = romData[base + 4 .. base + 4 + size];
-				base += size + 4;
-			}
-		}
-		decode_samples(spc[0x6C00 .. 0x6E00]);
-		if (samp[0].data == null) {
-			song_playing = false;
-		}
-		enum inst_base = 0x6E00;
 		instruments.reserve(80);
-		foreach (instrument; cast(Instrument[])(spc[inst_base .. inst_base + 64 * Instrument.sizeof])) {
+		foreach (instrument; cast(Instrument[])(buffer[instrumentBase .. instrumentBase + 64 * Instrument.sizeof])) {
 			instruments ~= instrument;
 		}
-		initialize(mixrate);
 	}
 
-
-	void load_pack(int pack_) nothrow @safe {
-		Pack* mp = &inmem_packs[pack_];
-		if (!(mp.status & IPACK_INMEM)) {
-			Pack* rp = &rom_packs[pack_];
-			mp.start_address = rp.start_address;
-			mp.blocks = new Block[](rp.blocks.length);
-			mp.blocks[] = rp.blocks[];
-			Block[] b = mp.blocks;
-			auto base = mp.start_address - 0xC00000;
-			for (int i = 0; i < mp.blocks.length; i++) {
-				b[i].data = new ubyte[](b[i].size);
-				b[i].data[0 .. b[i].size] = romData[base + 4 .. base + 4 + b[i].size];
-				base += 4 + b[i].size;
-			}
-			mp.status |= IPACK_INMEM;
-		}
-	}
-
-	void decompile_song(ref Song song, int start_addr, int end_addr) @system {
+	void decompile_song(ubyte[] data, ref Song song, int start_addr, int end_addr) @system {
 		ushort* sub_table;
 		int first_pattern;
 		int tracks_start;
@@ -986,11 +855,11 @@ struct NSPCPlayer {
 
 		// Get order length and repeat info (at this point, we don't know how
 		// many patterns there are, so the pattern pointers aren't validated yet)
-		ushort[] wp = cast(ushort[]) spc[start_addr .. $];
+		ushort[] wp = cast(ushort[]) data[start_addr .. $];
 		while (wp[0] >= 0x100) {
 			wp = wp[1 .. $];
 		}
-		song.order.length = cast(int)(&wp[0] - cast(ushort*)&spc[start_addr]);
+		song.order.length = cast(int)(&wp[0] - cast(ushort*)&data[start_addr]);
 		enforce(song.order.length > 0, "Order length is 0");
 		song.repeat = wp[0];
 		wp = wp[1 .. $];
@@ -1005,13 +874,13 @@ struct NSPCPlayer {
 			song.repeat_pos = repeat_off >> 1;
 		}
 
-		first_pattern = cast(int)(cast(ubyte*)&wp[0] - &spc[0]);
+		first_pattern = cast(int)(cast(ubyte*)&wp[0] - &data[0]);
 
 		// locate first track, determine number of patterns
-		while ((cast(ubyte*)&wp[0]) + 1 < &spc[end_addr] && wp[0] == 0) {
+		while ((cast(ubyte*)&wp[0]) + 1 < &data[end_addr] && wp[0] == 0) {
 			wp = wp[1 .. $];
 		}
-		if ((cast(ubyte*)&wp[0]) + 1 >= &spc[end_addr]) {
+		if ((cast(ubyte*)&wp[0]) + 1 >= &data[end_addr]) {
 			// no tracks in the song
 			tracks_start = end_addr - 1;
 		} else {
@@ -1021,13 +890,13 @@ struct NSPCPlayer {
 		pat_bytes = tracks_start - first_pattern;
 		enforce((pat_bytes > 0) && !(pat_bytes & 15), format!"Bad first track pointer: %x"(tracks_start));
 
-		if ((cast(ubyte*) wp) + 1 >= &spc[end_addr]) {
+		if ((cast(ubyte*) wp) + 1 >= &data[end_addr]) {
 			// no tracks in the song
 			tracks_end = end_addr - 1;
 		} else {
 			// find the last track
 			int tp, tpp = tracks_start;
-			while ((tp = *cast(ushort*)&spc[tpp -= 2]) == 0) {
+			while ((tp = *cast(ushort*)&data[tpp -= 2]) == 0) {
 			}
 
 			enforce(tp.inRange(tracks_start, end_addr - 1), format!"Bad last track pointer: %x"(tp));
@@ -1036,20 +905,20 @@ struct NSPCPlayer {
 			bool first = true;
 			int chan = (tpp - first_pattern) >> 1 & 7;
 			for (; chan; chan--) {
-				first &= *cast(ushort*)&spc[tpp -= 2] == 0;
+				first &= *cast(ushort*)&data[tpp -= 2] == 0;
 			}
 
-			const(ubyte)* end = &spc[tp];
+			const(ubyte)* end = &data[tp];
 			while (*end) {
 				end = next_code(end);
 			}
 			end += first;
-			tracks_end = cast(ushort)(end - &spc[0]);
+			tracks_end = cast(ushort)(end - &data[0]);
 		}
 
 		// Now the number of patterns is known, so go back and get the order
 		song.order = new int[](song.order.length);
-		wp = cast(ushort[]) spc[start_addr .. $];
+		wp = cast(ushort[]) data[start_addr .. $];
 		foreach (ref order; song.order) {
 			int pat = wp[0] - first_pattern;
 			wp = wp[1 .. $];
@@ -1062,7 +931,7 @@ struct NSPCPlayer {
 		song.subs = 0;
 		song.sub = null;
 
-		wp = cast(ushort[]) spc[first_pattern .. $];
+		wp = cast(ushort[]) data[first_pattern .. $];
 		for (int trk = 0; trk < song.pattern.length * 8; trk++) {
 			Track* t = &song.pattern[0][0] + trk;
 			int start = wp[0];
@@ -1078,19 +947,19 @@ struct NSPCPlayer {
 			// end of memory to find a 00 byte to terminate the track.
 			int next = 0x10000; // offset of following track
 			for (int track_ind = 0; track_ind < (song.pattern.length * 8); track_ind += 1) {
-				int track_addr = (cast(ushort*)(&spc[first_pattern]))[track_ind];
+				int track_addr = (cast(ushort*)(&data[first_pattern]))[track_ind];
 				if (track_addr < next && track_addr > start) {
 					next = track_addr;
 				}
 			}
 			// Determine the end of the track.
 			const(ubyte)* track_end;
-			for (track_end = &spc[start]; track_end < &spc.ptr[next] && *track_end != 0; track_end = next_code(track_end)) {
+			for (track_end = &data[start]; track_end < &data.ptr[next] && *track_end != 0; track_end = next_code(track_end)) {
 			}
 
-			t.size = cast(int)((track_end - &spc[0]) - start);
+			t.size = cast(int)((track_end - &data[0]) - start);
 			t.track = &(new ubyte[](t.size + 1))[0];
-			t.track[0 .. t.size] = spc[start .. start + t.size];
+			t.track[0 .. t.size] = data[start .. start + t.size];
 			t.track[t.size] = 0;
 
 			for (const(ubyte)* p = t.track; p < t.track + t.size; p = next_code(p)) {
@@ -1113,7 +982,7 @@ struct NSPCPlayer {
 					song.sub = cast(Track*) realloc(song.sub, Track.sizeof * song.subs);
 					Track* st = &song.sub[sub_entry];
 
-					ubyte* substart = &spc[sub_ptr];
+					ubyte* substart = &data[sub_ptr];
 					const(ubyte)* subend = substart;
 					while (*subend != 0) {
 						subend = next_code(subend);
@@ -1129,7 +998,7 @@ struct NSPCPlayer {
 		}
 	}
 
-	void decode_samples(const(ubyte)[] ptrtable) nothrow @system {
+	void decode_samples(ubyte[] buffer, const(ubyte)[] ptrtable) nothrow @system {
 		for (uint sn = 0; sn < 128; sn++) {
 			int start = ptrtable[0] | (ptrtable[1] << 8);
 			int loop = ptrtable[2] | (ptrtable[3] << 8);
@@ -1140,7 +1009,7 @@ struct NSPCPlayer {
 				continue;
 			}
 
-			int length = sample_length(spc, cast(ushort) start);
+			int length = sample_length(buffer, cast(ushort) start);
 			if (length == -1) {
 				continue;
 			}
@@ -1148,7 +1017,7 @@ struct NSPCPlayer {
 			int end = start + length;
 			samp[sn].length = (length / BRR_BLOCK_SIZE) * 16;
 			// The LOOP bit only matters for the last brr block
-			if (spc[start + length - BRR_BLOCK_SIZE] & BRR_FLAG_LOOP) {
+			if (buffer[start + length - BRR_BLOCK_SIZE] & BRR_FLAG_LOOP) {
 				if (loop < start || loop >= end) {
 					continue;
 				}
@@ -1172,7 +1041,7 @@ struct NSPCPlayer {
 			do {
 				needs_another_loop = false;
 				for (int pos = decoding_start; pos < end; pos += BRR_BLOCK_SIZE) {
-					decode_brr_block(p[idx * 16 .. (idx + 1) * 16], [p0, p1], spc[pos .. pos + BRR_BLOCK_SIZE], !!first_block);
+					decode_brr_block(p[idx * 16 .. (idx + 1) * 16], [p0, p1], buffer[pos .. pos + BRR_BLOCK_SIZE], !!first_block);
 					p0 = p[idx * 16 + 14];
 					p1 = p[idx * 16 + 15];
 					idx++;
@@ -1186,7 +1055,7 @@ struct NSPCPlayer {
 					after_loop[0] = p0;
 					after_loop[1] = p1;
 
-					decode_brr_block(after_loop[2 .. 18], after_loop[0 .. 2], spc[loop .. loop + BRR_BLOCK_SIZE], false);
+					decode_brr_block(after_loop[2 .. 18], after_loop[0 .. 2], buffer[loop .. loop + BRR_BLOCK_SIZE], false);
 					int full_loop_len = get_full_loop_len(samp[sn], after_loop[2 .. 4], (loop - start) / BRR_BLOCK_SIZE * 16);
 
 					if (full_loop_len == -1) {
@@ -1245,13 +1114,6 @@ struct NSPCPlayer {
 
 			pos = next;
 		}
-	}
-
-	Block* get_cur_block() @safe {
-		enforce(packs_loaded[2] < NUM_PACKS, "Pack out of range");
-		Pack* p = &inmem_packs[packs_loaded[2]];
-		enforce(current_block.inRange(0, p.blocks.length - 1), "Block out of range");
-		return &p.blocks[current_block];
 	}
 }
 
