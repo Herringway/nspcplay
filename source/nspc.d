@@ -3,6 +3,7 @@ module nspc;
 import core.stdc.math;
 import core.stdc.stdlib;
 import core.stdc.string;
+import std.exception;
 import std.format;
 import std.experimental.allocator;
 
@@ -864,9 +865,7 @@ struct NSPCPlayer {
 			bool valid = true;
 
 			int offset = rp.start_address - 0xC00000;
-			if (offset >= romData.length) {
-				throw new Exception("Attempted to read past end of ROM!");
-			}
+			enforce(offset < romData.length, "Attempted to read past end of ROM!");
 
 			while ((size = read!ushort(romData, offset)) > 0) {
 				int spc_addr = read!ushort(romData, offset + 2);
@@ -1035,9 +1034,7 @@ struct NSPCPlayer {
 			wp = wp[1 .. $];
 		}
 		song.order.length = cast(int)(&wp[0] - cast(ushort*)&spc[start_addr]);
-		if (song.order.length == 0) {
-			throw new Exception("Order length is 0");
-		}
+		enforce(song.order.length > 0, "Order length is 0");
 		song.repeat = wp[0];
 		wp = wp[1 .. $];
 		if (song.repeat == 0) {
@@ -1045,12 +1042,8 @@ struct NSPCPlayer {
 		} else {
 			int repeat_off = wp[0] - start_addr;
 			wp = wp[1 .. $];
-			if (repeat_off & 1 || repeat_off < 0 || repeat_off >= song.order.length * 2) {
-				throw new Exception(format!"Bad repeat pointer: %x"(repeat_off + start_addr));
-			}
-			if (wp[0] != 0) {
-				throw new Exception("Repeat not followed by end of song");
-			}
+			enforce(!(repeat_off & 1) && repeat_off.inRange(0, song.order.length * 2 - 1), format!"Bad repeat pointer: %x"(repeat_off + start_addr));
+			enforce(wp[0] == 0, "Repeat not followed by end of song");
 			wp = wp[1 .. $];
 			song.repeat_pos = repeat_off >> 1;
 		}
@@ -1069,9 +1062,7 @@ struct NSPCPlayer {
 		}
 
 		pat_bytes = tracks_start - first_pattern;
-		if (pat_bytes <= 0 || pat_bytes & 15) {
-			throw new Exception(format!"Bad first track pointer: %x"(tracks_start));
-		}
+		enforce((pat_bytes > 0) && !(pat_bytes & 15), format!"Bad first track pointer: %x"(tracks_start));
 
 		if ((cast(ubyte*) wp) + 1 >= &spc[end_addr]) {
 			// no tracks in the song
@@ -1082,9 +1073,7 @@ struct NSPCPlayer {
 			while ((tp = *cast(ushort*)&spc[tpp -= 2]) == 0) {
 			}
 
-			if (tp < tracks_start || tp >= end_addr) {
-				throw new Exception(format!"Bad last track pointer: %x"(tp));
-			}
+			enforce(tp.inRange(tracks_start, end_addr - 1), format!"Bad last track pointer: %x"(tp));
 
 			// is the last track the first one in its pattern?
 			bool first = true;
@@ -1107,9 +1096,7 @@ struct NSPCPlayer {
 		foreach (ref order; song.order) {
 			int pat = wp[0] - first_pattern;
 			wp = wp[1 .. $];
-			if (pat < 0 || pat >= pat_bytes || pat & 15) {
-				throw new Exception(format!"Bad pattern pointer: %x"(pat + first_pattern));
-			}
+			enforce(pat.inRange(0, pat_bytes - 1) && !(pat & 15), format!"Bad pattern pointer: %x"(pat + first_pattern));
 			order = pat >> 4;
 		}
 
@@ -1126,9 +1113,7 @@ struct NSPCPlayer {
 			if (start == 0) {
 				continue;
 			}
-			if (start < tracks_start || start >= tracks_end) {
-				throw new Exception(format!"Bad track pointer: %x"(start));
-			}
+			enforce(start.inRange(tracks_start, tracks_end - 1), format!"Bad track pointer: %x"(start));
 
 			// Go through track list (patterns) and find first track that has an address higher than us.
 			// If we find a track after us, we'll assume that this track doesn't overlap with that one.
@@ -1217,9 +1202,7 @@ struct NSPCPlayer {
 			size_t allocation_size = samp[sn].length + 1;
 
 			short* p = cast(short*) malloc(allocation_size * short.sizeof);
-			if (!p) {
-				debug assert(0, "malloc failed in BRR decoding");
-			}
+			assert(p, "malloc failed in BRR decoding");
 			samp[sn].data = p;
 
 			int needs_another_loop;
@@ -1256,15 +1239,7 @@ struct NSPCPlayer {
 						//	samp[sn].data[sa.length - sa.loop_len + 1]);
 						ptrdiff_t diff = samp[sn].length;
 						short* new_stuff = cast(short*) realloc(samp[sn].data, (samp[sn].length + samp[sn].loop_len + 1) * short.sizeof);
-						if (new_stuff == null) {
-							debug {
-								assert(0, "realloc failed in BRR decoding");
-							} else {
-								// TODO What do we do now? Replace this with something better
-								needs_another_loop = false;
-								break;
-							}
-						}
+						assert(new_stuff, "realloc failed in BRR decoding");
 						p = new_stuff + diff;
 						idx = 0;
 						samp[sn].length += samp[sn].loop_len;
@@ -1280,9 +1255,7 @@ struct NSPCPlayer {
 				++times;
 			} while (needs_another_loop && times < 64);
 
-			if (needs_another_loop) {
-				debug assert(0, "Sample took too many iterations to get into a cycle");
-			}
+			assert(!needs_another_loop, "Sample took too many iterations to get into a cycle");
 
 			// Put an extra sample at the end for easier interpolation
 			p[idx * 16 + 1] = samp[sn].loop_len != 0 ? samp[sn].data[samp[sn].length - samp[sn].loop_len] : 0;
@@ -1295,35 +1268,21 @@ struct NSPCPlayer {
 			int next = pos + 1;
 
 			if (byte_ < 0x80) {
-				if (byte_ == 0) {
-					throw new Exception("Track can not contain [00]");
-				}
+				enforce(byte_ != 0, "Track can not contain [00]");
 				if (next != data.length && data[next] < 0x80) {
 					next++;
 				}
-				if (next == data.length) {
-					throw new Exception("Track can not end with note-length code");
-				}
+				enforce(next != data.length, "Track can not end with note-length code");
 			} else if (byte_ >= 0xE0) {
-				if (byte_ == 0xFF) {
-					throw new Exception("Invalid code [FF]");
-				}
+				enforce(byte_ != 0xFF, "Invalid code [FF]");
 				next += code_length[byte_ - 0xE0];
-				if (next > data.length) {
-					throw new Exception(format!"Incomplete code: [%(%02X %)]"(data[pos .. pos + data.length]));
-				}
+				enforce(next <= data.length, format!"Incomplete code: [%(%02X %)]"(data[pos .. pos + data.length]));
 
 				if (byte_ == 0xEF) {
-					if (is_sub) {
-						throw new Exception("Can't call sub from within a sub");
-					}
+					enforce(!is_sub, "Can't call sub from within a sub");
 					int sub = (cast(ushort[]) data[pos + 1 .. pos + 3])[0];
-					if (sub >= cur_song.subs) {
-						throw new Exception(format!"Subroutine %d not present"(sub));
-					}
-					if (data[pos + 3] == 0) {
-						throw new Exception("Subroutine loop count can not be 0");
-					}
+					enforce(sub < cur_song.subs, format!"Subroutine %d not present"(sub));
+					enforce(data[pos + 3] != 0, "Subroutine loop count can not be 0");
 				}
 			}
 
@@ -1332,13 +1291,9 @@ struct NSPCPlayer {
 	}
 
 	Block* get_cur_block() @safe {
-		if (packs_loaded[2] >= NUM_PACKS) {
-			throw new Exception("Pack out of range");
-		}
+		enforce(packs_loaded[2] < NUM_PACKS, "Pack out of range");
 		Pack* p = &inmem_packs[packs_loaded[2]];
-		if ((current_block < 0) || (current_block >= p.blocks.length)) {
-			throw new Exception("Block out of range");
-		}
+		enforce(current_block.inRange(0, p.blocks.length - 1), "Block out of range");
 		return &p.blocks[current_block];
 	}
 }
@@ -1444,4 +1399,8 @@ static int get_full_loop_len(const Sample sa, const short[2] next_block, int fir
 
 T read(T)(const(ubyte)[] data, size_t offset) {
 	return (cast(const(T)[])(data[offset .. offset + T.sizeof]))[0];
+}
+
+bool inRange(T)(T val, T lower, T upper) {
+	return ((val >= lower) && (val <= upper));
 }
