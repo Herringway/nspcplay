@@ -3,6 +3,7 @@
 	"license": "proprietary",
 	"name": "nspcplay",
 	"subPackages": [
-		"player"
+		"player",
+		"ebextract"
 	]
 }
