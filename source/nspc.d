@@ -121,40 +121,12 @@ struct Track {
 	ubyte* track; // null for inactive track
 }
 
-struct Pack {
-	int start_address;
-	int status; // See constants above
-	Block[] blocks;
-}
-
-struct Block {
-	ushort size;
-	ushort spc_address;
-	ubyte[] data; // only used for inmem packs
-}
 // note style tables, from 6F80
 immutable ubyte[8] release_table = [0x33, 0x66, 0x7f, 0x99, 0xb2, 0xcc, 0xe5, 0xfc];
 immutable ubyte[16] volume_table = [0x19, 0x33, 0x4c, 0x66, 0x72, 0x7f, 0x8c, 0x99, 0xa5, 0xb2, 0xbf, 0xcc, 0xd8, 0xe5, 0xf2, 0xfc];
 
 // number of bytes following a Ex/Fx code
 immutable ubyte[32] code_length = [1, 1, 2, 3, 0, 1, 2, 1, 2, 1, 1, 3, 0, 1, 2, 3, 1, 3, 3, 0, 1, 3, 0, 3, 3, 3, 1, 2, 0, 0, 0, 0];
-
-enum NUM_SONGS = 0xBF;
-enum NUM_PACKS = 0xA9;
-enum BGM_PACK_TABLE = 0x4F70A;
-enum PACK_POINTER_TABLE = 0x4F947;
-enum SONG_POINTER_TABLE = 0x26298C;
-
-enum AREA_END = -4;
-enum AREA_NOT_IN_FILE = -3;
-enum AREA_NON_SPC = -2;
-enum AREA_FREE = -1;
-
-enum MAX_TITLE_LEN = 60;
-enum MAX_TITLE_LEN_STR = "60";
-
-enum IPACK_INMEM = 1; // blocks[i].data valid if set
-enum IPACK_CHANGED = 2;
 
 enum BRR_BLOCK_SIZE = 9;
 enum BRR_FLAG_END = 1;
