@@ -174,15 +174,12 @@ struct NSPCPlayer {
 	SongState state;
 	SongState pattop_state;
 	int mixrate = 44100;
-	int bufsize = 2205;
 	int chmask = 255;
 	int timer_speed = 500;
 	bool song_playing;
 
-	int bufs_used;
 	ubyte[65536] spc;
 	Sample[128] samp;
-	private int pat_length;
 
 	const(ubyte)[] romData;
 
@@ -271,7 +268,6 @@ struct NSPCPlayer {
 			idx++;
 			bytes_left -= 4;
 		}
-		bufs_used++;
 	}
 
 	void parser_init(ref Parser p, ChannelState c) nothrow @safe {
@@ -898,10 +894,6 @@ struct NSPCPlayer {
 		return true;
 	}
 
-	void free_pack(Pack* p) nothrow @safe {
-		p.status = 0;
-	}
-
 	void free_samples() nothrow @safe {
 		foreach (ref sample; samp) {
 			sample.data = null;
@@ -911,9 +903,40 @@ struct NSPCPlayer {
 	private void load_music(ubyte[] packs_used, int spc_addr) @system {
 		packs_loaded[0] = packs_used[0];
 		packs_loaded[1] = packs_used[1];
-		load_songpack(packs_used[2]);
-		select_block_by_address(spc_addr);
-		load_instruments();
+
+		if (packs_loaded[2] != packs_used[2]) {
+			// Unload the current songpack unless it has been changed
+			if (packs_loaded[2] < NUM_PACKS) {
+				Pack* old = &inmem_packs[packs_loaded[2]];
+				if (!(old.status & IPACK_CHANGED)) {
+					old.status = 0;
+				}
+			}
+
+			packs_loaded[2] = cast(ubyte) packs_used[2];
+			if (packs_used[2] < NUM_PACKS) {
+				load_pack(packs_used[2]);
+			}
+		}
+		int bnum = -1;
+		if (packs_loaded[2] < NUM_PACKS) {
+			Pack* p = &inmem_packs[packs_loaded[2]];
+			for (bnum = cast(int) p.blocks.length - 1; bnum >= 0; bnum--) {
+				Block* b = &p.blocks[bnum];
+				if (cast(uint)(spc_addr - b.spc_address) < b.size) {
+					break;
+				}
+			}
+		}
+		current_block = bnum;
+		Block* b = get_cur_block();
+		if (b != null) {
+			spc[b.spc_address .. b.spc_address + b.size] = b.data[0 .. b.size];
+			decompile_song(cur_song, b.spc_address, b.spc_address + b.size);
+		}
+		initialize(mixrate);
+
+		load_instruments(packs_used[0 .. 2]);
 	}
 
 	private void song_selected(int index) @system {
@@ -921,11 +944,10 @@ struct NSPCPlayer {
 		load_music(pack_used[index][], song_address[index]);
 	}
 
-	void load_instruments() nothrow @system {
+	void load_instruments(ubyte[] packs) nothrow @system {
 		free_samples();
 		spc[] = 0;
-		for (int i = 0; i < 2; i++) {
-			int p = packs_loaded[i];
+		foreach (p; packs) {
 			if (p >= NUM_PACKS) {
 				continue;
 			}
@@ -952,25 +974,6 @@ struct NSPCPlayer {
 		initialize(mixrate);
 	}
 
-	void load_songpack(int new_pack) nothrow @safe {
-		if (packs_loaded[2] == new_pack)
-			return;
-
-		// Unload the current songpack unless it has been changed
-		if (packs_loaded[2] < NUM_PACKS) {
-			Pack* old = &inmem_packs[packs_loaded[2]];
-			if (!(old.status & IPACK_CHANGED)) {
-				free_pack(old);
-			}
-		}
-
-		packs_loaded[2] = cast(ubyte) new_pack;
-		if (new_pack >= NUM_PACKS) {
-			return;
-		}
-
-		load_pack(new_pack);
-	}
 
 	Pack* load_pack(int pack_) nothrow @safe {
 		Pack* mp = &inmem_packs[pack_];
@@ -990,31 +993,6 @@ struct NSPCPlayer {
 		}
 
 		return mp;
-	}
-
-	void select_block(int block_) @system {
-		current_block = block_;
-
-		Block* b = get_cur_block();
-		if (b != null) {
-			spc[b.spc_address .. b.spc_address + b.size] = b.data[0 .. b.size];
-			decompile_song(cur_song, b.spc_address, b.spc_address + b.size);
-		}
-		initialize(mixrate);
-	}
-
-	void select_block_by_address(int spc_addr) @system {
-		int bnum = -1;
-		if (packs_loaded[2] < NUM_PACKS) {
-			Pack* p = &inmem_packs[packs_loaded[2]];
-			for (bnum = cast(int) p.blocks.length - 1; bnum >= 0; bnum--) {
-				Block* b = &p.blocks[bnum];
-				if (cast(uint)(spc_addr - b.spc_address) < b.size) {
-					break;
-				}
-			}
-		}
-		select_block(bnum);
 	}
 
 	void decompile_song(ref Song song, int start_addr, int end_addr) @system {
