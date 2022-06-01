@@ -1258,7 +1258,7 @@ struct NSPCPlayer {
 			assert(!needs_another_loop, "Sample took too many iterations to get into a cycle");
 
 			// Put an extra sample at the end for easier interpolation
-			p[idx * 16 + 1] = samp[sn].loop_len != 0 ? samp[sn].data[samp[sn].length - samp[sn].loop_len] : 0;
+			p[idx * 16] = samp[sn].loop_len != 0 ? samp[sn].data[samp[sn].length - samp[sn].loop_len] : 0;
 		}
 	}
 
