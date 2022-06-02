@@ -656,7 +656,7 @@ struct NSPCPlayer {
 					}
 				}
 			// $0B84
-			if (c.note.cycles == 0 && *c.ptr == 0xF9) {
+			if (c.note.cycles == 0 && c.ptr[0] == 0xF9) {
 				doCommand(st, c);
 			}
 		}
