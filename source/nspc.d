@@ -847,7 +847,7 @@ struct NSPCPlayer {
 
 		// Get order length and repeat info (at this point, we don't know how
 		// many patterns there are, so the pattern pointers aren't validated yet)
-		ushort[] wp = cast(ushort[]) data[startAddress .. $];
+		ushort[] wp = cast(ushort[]) data[startAddress .. $ -  ($ - startAddress) % 2];
 		while (wp[0] >= 0x100) {
 			wp = wp[1 .. $];
 		}
@@ -910,7 +910,7 @@ struct NSPCPlayer {
 
 		// Now the number of patterns is known, so go back and get the order
 		song.order = new int[](song.order.length);
-		wp = cast(ushort[]) data[startAddress .. $];
+		wp = cast(ushort[]) data[startAddress .. $ -  ($ - startAddress) % 2];
 		foreach (ref order; song.order) {
 			int pat = wp[0] - firstPattern;
 			wp = wp[1 .. $];
@@ -923,7 +923,7 @@ struct NSPCPlayer {
 		song.subs = 0;
 		song.sub = null;
 
-		wp = cast(ushort[]) data[firstPattern .. $];
+		wp = cast(ushort[]) data[firstPattern .. $ -  ($ - firstPattern) % 2];
 		for (int trk = 0; trk < song.pattern.length * 8; trk++) {
 			Track* t = &song.pattern[0][0] + trk;
 			int start = wp[0];
