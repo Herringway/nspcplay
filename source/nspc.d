@@ -630,26 +630,26 @@ struct NSPCPlayer {
 				CF7(c);
 			} else
 				while (1) {
-					const(ubyte)* p = c.ptr;
+					const ubyte[] p = c.ptr[0 .. 2];
 
-					if (*p == 0) { // end of sub or pattern
+					if (p[0] == 0) { // end of sub or pattern
 						if (c.subCount) { // end of sub
 							c.ptr = --c.subCount ? currentSong.sub[c.subStart].track : c.subRet;
 						} else {
 							return false;
 						}
-					} else if (*p < 0x80) {
-						c.noteLen = *p;
+					} else if (p[0] < 0x80) {
+						c.noteLen = p[0];
 						if (p[1] < 0x80) {
 							c.noteStyle = p[1];
-							c.ptr += 2;
+							c.ptr = &c.ptr[2];
 						} else {
-							c.ptr++;
+							c.ptr = &c.ptr[1];
 						}
-					} else if (*p < 0xE0) {
-						c.ptr++;
+					} else if (p[0] < 0xE0) {
+						c.ptr = &c.ptr[1];
 						c.next = c.noteLen - 1;
-						doNote(st, c, *p);
+						doNote(st, c, p[0]);
 						break;
 					} else { // E0-FF
 						doCommand(st, c);
@@ -775,7 +775,7 @@ struct NSPCPlayer {
 	}
 
 	/// Start playing music
-	void play() @system {
+	void play() @safe {
 		initialize(mixrate);
 		songPlaying = true;
 	}
