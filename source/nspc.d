@@ -3,6 +3,7 @@ module nspc;
 import core.stdc.math;
 import core.stdc.stdlib;
 import core.stdc.string;
+import std.algorithm.comparison;
 import std.exception;
 import std.experimental.logger;
 import std.format;
@@ -219,16 +220,8 @@ struct NSPCPlayer {
 					}
 				}
 			}
-			if (left < -32768) {
-				left = -32768;
-			} else if (left > 32767) {
-				left = 32767;
-			}
-			if (right < -32768) {
-				right = -32768;
-			} else if (right > 32767) {
-				right = 32767;
-			}
+			left = clamp(left, short.min, short.max);
+			right = clamp(right, short.min, short.max);
 			buffer[idx][0] = cast(short) left;
 			buffer[idx][1] = cast(short) right;
 			idx++;
