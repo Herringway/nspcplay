@@ -699,18 +699,6 @@ struct NSPCPlayer {
 		return true;
 	}
 
-	private bool doCycleNoSound(ref SongState st) nothrow @system {
-		bool ret = doCycle(st);
-		if (ret) {
-			foreach (ref ch; st.chan) {
-				if (ch.noteRelease == 0) {
-					ch.sampPos = -1;
-				}
-			}
-		}
-		return ret;
-	}
-
 	private int subCycleCalc(const SongState st, int delta) nothrow @safe {
 		if (delta < 0x8000) {
 			return st.cycleTimer * delta >> 8;
