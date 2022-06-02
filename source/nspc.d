@@ -841,7 +841,6 @@ struct NSPCPlayer {
 		int tracks_start;
 		int tracks_end;
 		int pat_bytes;
-		string error;
 		song.address = cast(ushort) start_addr;
 		song.changed = false;
 
