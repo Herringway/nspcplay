@@ -251,6 +251,17 @@ struct NSPCPlayer {
 		return p;
 	}
 
+	private const(ubyte)[] nextCode(const(ubyte)[] p) nothrow @safe {
+		ubyte chr = p[0];
+		p = p[1 .. $];
+		if (chr < 0x80) {
+			p = p[p[0] < 0x80 .. $];
+		} else if (chr >= 0xE0) {
+			p = p[codeLength[chr - 0xE0] .. $];
+		}
+		return p;
+	}
+
 	private bool parserAdvance(ref Parser p) nothrow @system {
 		int chr = *p.ptr;
 		if (chr == 0) {
@@ -837,7 +848,7 @@ struct NSPCPlayer {
 	}
 
 	private void decompileSong(ubyte[] data, ref Song song, int startAddress, int endAddress) @system {
-		ushort* subTable;
+		ushort[] subTable;
 		int firstPattern;
 		int tracksStart;
 		int tracksEnd;
@@ -851,7 +862,7 @@ struct NSPCPlayer {
 		while (wp[0] >= 0x100) {
 			wp = wp[1 .. $];
 		}
-		song.order.length = cast(int)(&wp[0] - cast(ushort*)&data[startAddress]);
+		song.order.length = &wp[0] - cast(ushort*)&data[startAddress];
 		enforce(song.order.length > 0, "Order length is 0");
 		song.repeat = wp[0];
 		wp = wp[1 .. $];
@@ -888,7 +899,7 @@ struct NSPCPlayer {
 		} else {
 			// find the last track
 			int tp, tpp = tracksStart;
-			while ((tp = *cast(ushort*)&data[tpp -= 2]) == 0) {
+			while ((tp = read!ushort(data, tpp -= 2)) == 0) {
 			}
 
 			enforce(tp.inRange(tracksStart, endAddress - 1), format!"Bad last track pointer: %x"(tp));
@@ -897,7 +908,7 @@ struct NSPCPlayer {
 			bool first = true;
 			int chan = (tpp - firstPattern) >> 1 & 7;
 			for (; chan; chan--) {
-				first &= *cast(ushort*)&data[tpp -= 2] == 0;
+				first &= read!ushort(data, tpp -= 2) == 0;
 			}
 
 			const(ubyte)* end = &data[tp];
@@ -954,11 +965,11 @@ struct NSPCPlayer {
 			t.track[0 .. t.size] = data[start .. start + t.size];
 			t.track[t.size] = 0;
 
-			for (const(ubyte)* p = t.track; p < t.track + t.size; p = nextCode(p)) {
-				if (*p != 0xEF) {
+			for (const(ubyte)[] p = t.track[0 .. t.size]; p.length > 0; p = nextCode(p)) {
+				if (p[0] != 0xEF) {
 					continue;
 				}
-				int subPtr = *cast(ushort*)(p + 1);
+				int subPtr = (cast(ushort[])(p[1 .. 3]))[0];
 				int subEntry;
 
 				// find existing entry in subTable
@@ -968,7 +979,7 @@ struct NSPCPlayer {
 					// subEntry doesn't already exist in subTable; create it
 					subEntry = song.subs++;
 
-					subTable = &(new ushort[](song.subs))[0];
+					subTable = new ushort[](song.subs);
 					subTable[subEntry] = cast(ushort) subPtr;
 
 					song.sub = cast(Track*) realloc(song.sub, Track.sizeof * song.subs);
@@ -984,7 +995,7 @@ struct NSPCPlayer {
 					st.track[0 .. st.size + 1] = substart[0 .. st.size + 1];
 					internalValidateTrack(st.track[0 .. st.size], true);
 				}
-				*cast(ushort*)(p + 1) = cast(ushort) subEntry;
+				(cast(ushort[])(p[1 .. 3]))[0] = cast(ushort) subEntry;
 			}
 			internalValidateTrack(t.track[0 .. t.size], false);
 		}
