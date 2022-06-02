@@ -164,9 +164,7 @@ struct NSPCPlayer {
 	Instrument[] instruments;
 
 	void fill_buffer(short[2][] buffer) nothrow @system {
-		size_t idx;
-		int bytes_left = cast(int)(buffer.length * 2 * short.sizeof);
-		while (bytes_left > 0) {
+		foreach (ref sample; buffer) {
 			if ((state.next_timer_tick -= timer_speed) < 0) {
 				state.next_timer_tick += mixrate;
 				if (!do_timer()) {
@@ -222,10 +220,8 @@ struct NSPCPlayer {
 			}
 			left = clamp(left, short.min, short.max);
 			right = clamp(right, short.min, short.max);
-			buffer[idx][0] = cast(short) left;
-			buffer[idx][1] = cast(short) right;
-			idx++;
-			bytes_left -= 4;
+			sample[0] = cast(short) left;
+			sample[1] = cast(short) right;
 		}
 	}
 
