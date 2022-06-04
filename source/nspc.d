@@ -160,11 +160,13 @@ struct NSPCFileHeader {
 
 ///
 struct NSPCPlayer {
+	enum defaultSpeed = 500;
+
 	private Song currentSong;
 	private SongState state;
 	private int mixrate = 44100;
 	private int chmask = 255;
-	private int timerSpeed = 500;
+	private int timerSpeed = defaultSpeed;
 	private bool songPlaying;
 
 	private Sample[128] samp;
@@ -1118,6 +1120,10 @@ struct NSPCPlayer {
 
 			pos = next;
 		}
+	}
+	/// Sets the playback speed. Default value is NSPCPlayer.defaultSpeed.
+	public void setSpeed(ushort rate) @safe {
+		timerSpeed = rate;
 	}
 }
 
