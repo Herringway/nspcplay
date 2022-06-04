@@ -173,6 +173,8 @@ struct NSPCPlayer {
 
 	private Instrument[] instruments;
 
+	private bool loopEnabled = true;
+
 	///
 	void fillBuffer(short[2][] buffer) nothrow @system {
 		foreach (ref sample; buffer) {
@@ -573,7 +575,11 @@ struct NSPCPlayer {
 		state.ordnum++;
 		if (state.ordnum >= currentSong.order.length) {
 			if (--state.repeatCount >= 0x80) {
-				state.repeatCount = cast(ubyte) currentSong.repeat;
+				if (loopEnabled) {
+					state.repeatCount = cast(ubyte) currentSong.repeat;
+				} else {
+					state.repeatCount = 0;
+				}
 			}
 			if (state.repeatCount == 0) {
 				state.ordnum--;
@@ -1124,6 +1130,10 @@ struct NSPCPlayer {
 	/// Sets the playback speed. Default value is NSPCPlayer.defaultSpeed.
 	public void setSpeed(ushort rate) @safe {
 		timerSpeed = rate;
+	}
+	/// Enable or disable song looping
+	public void looping(bool enabled) @safe {
+		loopEnabled = enabled;
 	}
 }
 
