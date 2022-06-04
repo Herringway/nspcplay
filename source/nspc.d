@@ -3,6 +3,7 @@ module nspc;
 import core.stdc.math;
 import core.stdc.stdlib;
 import core.stdc.string;
+import core.memory;
 import std.algorithm.comparison;
 import std.exception;
 import std.experimental.logger;
@@ -982,7 +983,7 @@ struct NSPCPlayer {
 					subTable = new ushort[](song.subs);
 					subTable[subEntry] = cast(ushort) subPtr;
 
-					song.sub = cast(Track*) realloc(song.sub, Track.sizeof * song.subs);
+					song.sub = cast(Track*) GC.realloc(song.sub, Track.sizeof * song.subs);
 					Track* st = &song.sub[subEntry];
 
 					ubyte* substart = &data[subPtr];
@@ -1030,7 +1031,7 @@ struct NSPCPlayer {
 
 			size_t allocationSize = samp[sn].length + 1;
 
-			short* p = cast(short*) malloc(allocationSize * short.sizeof);
+			short* p = cast(short*) GC.malloc(allocationSize * short.sizeof);
 			assert(p, "malloc failed in BRR decoding");
 			samp[sn].data = p;
 
@@ -1067,7 +1068,7 @@ struct NSPCPlayer {
 						//	samp[sn].data[sa.length - sa.loopLength],
 						//	samp[sn].data[sa.length - sa.loopLength + 1]);
 						ptrdiff_t diff = samp[sn].length;
-						short* newStuff = cast(short*) realloc(samp[sn].data, (samp[sn].length + samp[sn].loopLength + 1) * short.sizeof);
+						short* newStuff = cast(short*) GC.realloc(samp[sn].data, (samp[sn].length + samp[sn].loopLength + 1) * short.sizeof);
 						assert(newStuff, "realloc failed in BRR decoding");
 						p = newStuff + diff;
 						idx = 0;
