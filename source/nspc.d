@@ -965,11 +965,11 @@ struct NSPCPlayer {
 				}
 			}
 			// Determine the end of the track.
-			const(ubyte)* trackEnd;
-			for (trackEnd = &data[start]; trackEnd < &data.ptr[next] && *trackEnd != 0; trackEnd = nextCode(trackEnd)) {
+			const(ubyte)[] trackEnd;
+			for (trackEnd = data[start .. next]; trackEnd.length > 0 && trackEnd[0] != 0; trackEnd = nextCode(trackEnd)) {
 			}
 
-			t.size = cast(int)((trackEnd - &data[0]) - start);
+			t.size = cast(int)((trackEnd.ptr - &data[0]) - start);
 			t.track = &(new ubyte[](t.size + 1))[0];
 			t.track[0 .. t.size] = data[start .. start + t.size];
 			t.track[t.size] = 0;
@@ -978,7 +978,7 @@ struct NSPCPlayer {
 				if (p[0] != 0xEF) {
 					continue;
 				}
-				int subPtr = (cast(ushort[])(p[1 .. 3]))[0];
+				int subPtr = (cast(const(ushort)[])(p[1 .. 3]))[0];
 				int subEntry;
 
 				// find existing entry in subTable
