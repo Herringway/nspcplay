@@ -50,8 +50,17 @@ extern (C) void _sampling_func(void* user, ubyte* buf, int bufSize) nothrow {
 
 int main(string[] args) {
 	enum channels = 2;
-	enum sampleRate = 44100;
+	int sampleRate = 44100;
+	ushort speed = 500;
 	if (args.length < 2) {
+		return 1;
+	}
+
+	auto help = getopt(args,
+		"f|samplerate", "Sets sample rate (Hz)", &sampleRate,
+		"s|speed", "Sets playback speed (500 is default)", &speed);
+	if (help.helpWanted) {
+		defaultGetoptPrinter("NSPC player", help.options);
 		return 1;
 	}
 	sharedLog = new FileLogger(stdout, LogLevel.trace);
@@ -70,6 +79,8 @@ int main(string[] args) {
 
 	nspc.play();
 	trace("Playing NSPC music");
+
+	nspc.setSpeed(speed);
 
 	// Prepare to play music
 	if (!initAudio(&_sampling_func, channels, sampleRate, &nspc)) {
