@@ -138,7 +138,9 @@ private enum brrFlagLoop = 2;
 private struct Instrument {
 	align(1):
 	ubyte sampleID;
-	ubyte[3] adsr;
+	ubyte adsr0;
+	ubyte adsr1;
+	ubyte gain;
 	ubyte tuning;
 	ubyte tuningFraction;
 }
@@ -341,7 +343,7 @@ struct NSPCPlayer {
 		}
 
 		c.inst = cast(ubyte) inst;
-		c.instADSR1 = idata.adsr[1];
+		c.instADSR1 = idata.adsr1;
 		if (c.instADSR1 & 0x1F) {
 			int i = c.instADSR1 & 0x1F;
 			// calculate the constant to multiply envelope height by on each sample
