@@ -177,6 +177,7 @@ struct NSPCPlayer {
 
 	private bool loopEnabled = true;
 
+	private enum maxInstruments = 64;
 	///
 	void fillBuffer(short[2][] buffer) nothrow @system {
 		foreach (ref sample; buffer) {
@@ -852,8 +853,8 @@ struct NSPCPlayer {
 
 	private void processInstruments(ubyte[] buffer, ushort instrumentBase, ushort sampleBase) @system {
 		decodeSamples(buffer, buffer[sampleBase .. sampleBase + 0x200]);
-		instruments.reserve(80);
-		foreach (instrument; cast(Instrument[])(buffer[instrumentBase .. instrumentBase + 64 * Instrument.sizeof])) {
+		instruments.reserve(maxInstruments);
+		foreach (idx, instrument; cast(Instrument[])(buffer[instrumentBase .. instrumentBase + maxInstruments * Instrument.sizeof])) {
 			instruments ~= instrument;
 		}
 	}
