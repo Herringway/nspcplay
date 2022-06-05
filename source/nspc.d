@@ -1094,7 +1094,7 @@ struct NSPCPlayer {
 				// In the vanilla game, the most iterations needed is 48 (for sample 0x17 in pack 5).
 				// Most samples need less than 10.
 				++times;
-			} while (needsAnotherLoop && times < 64);
+			} while (needsAnotherLoop && times < 128);
 
 			assert(!needsAnotherLoop, "Sample took too many iterations to get into a cycle");
 
