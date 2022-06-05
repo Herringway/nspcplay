@@ -40,7 +40,7 @@ private struct Slider {
 }
 
 private struct ChannelState {
-	const(ubyte)* ptr;
+	ubyte[] ptr;
 
 	int next; // time left in note
 
@@ -52,7 +52,7 @@ private struct ChannelState {
 	ubyte noteRelease; // time to release note, in cycles
 
 	int subStart; // current subroutine number
-	const(ubyte)* subRet; // where to return to after sub
+	ubyte[] subRet; // where to return to after sub
 	ubyte subCount; // number of loops
 
 	ubyte inst; // instrument
@@ -95,14 +95,14 @@ private struct ChannelState {
 }
 
 private struct Sample {
-	short* data;
+	short[] data;
 	int length;
 	int loopLength;
 }
 
 private struct Parser {
-	const(ubyte)* ptr;
-	const(ubyte)* subRet;
+	ubyte[] ptr;
+	ubyte[] subRet;
 	int subStart;
 	ubyte subCount;
 	ubyte noteLen;
@@ -120,7 +120,7 @@ private struct Song {
 
 private struct Track {
 	int size;
-	ubyte* track; // null for inactive track
+	ubyte[] track; // null for inactive track
 }
 
 // note style tables, from 6F80
@@ -178,7 +178,7 @@ struct NSPCPlayer {
 
 	private enum maxInstruments = 64;
 	///
-	void fillBuffer(short[2][] buffer) nothrow @system {
+	void fillBuffer(short[2][] buffer) nothrow @safe {
 		foreach (ref sample; buffer) {
 			if ((state.nextTimerTick -= timerSpeed) < 0) {
 				state.nextTimerTick += mixrate;
@@ -241,21 +241,11 @@ struct NSPCPlayer {
 	}
 
 	private void parserInit(ref Parser p, ChannelState c) nothrow @safe {
-		p.ptr = cast(const(ubyte)*) c.ptr;
+		p.ptr = c.ptr;
 		p.subStart = c.subStart;
-		p.subRet = cast(const(ubyte)*) c.subRet;
+		p.subRet = c.subRet;
 		p.subCount = c.subCount;
 		p.noteLen = c.noteLen;
-	}
-
-	private const(ubyte)* nextCode(const(ubyte)* p) nothrow @system {
-		ubyte chr = *p++;
-		if (chr < 0x80) {
-			p += *p < 0x80;
-		} else if (chr >= 0xE0) {
-			p += codeLength[chr - 0xE0];
-		}
-		return p;
 	}
 
 	private inout(ubyte)[] nextCode(inout(ubyte)[] p) nothrow @safe {
@@ -269,16 +259,16 @@ struct NSPCPlayer {
 		return p;
 	}
 
-	private bool parserAdvance(ref Parser p) nothrow @system {
-		int chr = *p.ptr;
+	private bool parserAdvance(ref Parser p) nothrow @safe {
+		int chr = p.ptr[0];
 		if (chr == 0) {
 			if (p.subCount == 0) {
 				return false;
 			}
 			p.ptr = --p.subCount ? currentSong.sub[p.subStart].track : p.subRet;
 		} else if (chr == 0xEF) {
-			p.subRet = p.ptr + 4;
-			p.subStart = *cast(ushort*)&p.ptr[1];
+			p.subRet = p.ptr[4 .. $];
+			p.subStart = (cast(ushort[])p.ptr[1 .. 3])[0];
 			p.subCount = p.ptr[3];
 			p.ptr = currentSong.sub[p.subStart].track;
 		} else {
@@ -407,10 +397,10 @@ struct NSPCPlayer {
 	}
 
 	// do a Ex/Fx code
-	private void doCommand(ref SongState st, ref ChannelState c) nothrow @system {
-		const(ubyte)* p = c.ptr;
-		c.ptr += 1 + codeLength[*p - 0xE0];
-		switch (*p) {
+	private void doCommand(ref SongState st, ref ChannelState c) nothrow @safe {
+		ubyte[] p = c.ptr;
+		c.ptr = c.ptr[1 + codeLength[p[0] - 0xE0] .. $];
+		switch (p[0]) {
 			case 0xE0:
 				setInstrument(st, c, p[1]);
 				break;
@@ -475,7 +465,7 @@ struct NSPCPlayer {
 				break;
 			case 0xF1:
 			case 0xF2:
-				c.portType = *p & 1;
+				c.portType = p[0] & 1;
 				c.portStart = p[1];
 				c.portLength = p[2];
 				c.portRange = p[3];
@@ -505,7 +495,7 @@ struct NSPCPlayer {
 	}
 
 	// $0654 + $08D4-$8EF
-	private void doNote(ref SongState st, ref ChannelState c, int note) nothrow @system {
+	private void doNote(ref SongState st, ref ChannelState c, int note) nothrow @safe {
 		// using >=CA as a note switches to that instrument and plays note A4
 		if (note >= 0xCA) {
 			setInstrument(st, c, note);
@@ -550,11 +540,11 @@ struct NSPCPlayer {
 			Parser p;
 			parserInit(p, c);
 			do {
-				if (*p.ptr >= 0x80 && *p.ptr < 0xE0) {
+				if (p.ptr[0] >= 0x80 && p.ptr[0] < 0xE0) {
 					break;
 				}
 			} while (parserAdvance(p));
-			nextNote = *p.ptr;
+			nextNote = p.ptr[0];
 		}
 
 		int rel;
@@ -642,7 +632,7 @@ struct NSPCPlayer {
 	}
 
 	// $07F9 + $0625
-	private bool doCycle(ref SongState st) nothrow @system {
+	private bool doCycle(ref SongState st) nothrow @safe {
 		foreach (ref c; st.chan) {
 			if (c.ptr == null) {
 				continue; //8F0
@@ -652,7 +642,7 @@ struct NSPCPlayer {
 				CF7(c);
 			} else
 				while (1) {
-					const ubyte[] p = c.ptr[0 .. 2];
+					const ubyte[] p = c.ptr[0 .. $];
 
 					if (p[0] == 0) { // end of sub or pattern
 						if (c.subCount) { // end of sub
@@ -664,12 +654,12 @@ struct NSPCPlayer {
 						c.noteLen = p[0];
 						if (p[1] < 0x80) {
 							c.noteStyle = p[1];
-							c.ptr = &c.ptr[2];
+							c.ptr = c.ptr[2 .. $];
 						} else {
-							c.ptr = &c.ptr[1];
+							c.ptr = c.ptr[1 .. $];
 						}
 					} else if (p[0] < 0xE0) {
-						c.ptr = &c.ptr[1];
+						c.ptr = c.ptr[1 .. $];
 						c.next = c.noteLen - 1;
 						doNote(st, c, p[0]);
 						break;
@@ -768,7 +758,7 @@ struct NSPCPlayer {
 		}
 	}
 
-	private bool doTimer() nothrow @system {
+	private bool doTimer() nothrow @safe {
 		state.cycleTimer += state.tempo.cur >> 8;
 		if (state.cycleTimer >= 256) {
 			state.cycleTimer -= 256;
@@ -802,15 +792,15 @@ struct NSPCPlayer {
 		songPlaying = true;
 	}
 	/// Load a single sequence pack at a given address
-	void loadSequencePack(const(ubyte)[] data, ushort base) @system {
+	void loadSequencePack(const(ubyte)[] data, ushort base) @safe {
 		loadSequence(data, base);
 	}
 	/// Load a single sequence pack, automatically detecting the address from the pack header
-	void loadSequencePack(const(ubyte)[] data) @system {
+	void loadSequencePack(const(ubyte)[] data) @safe {
 		ushort base = (cast(const(ushort)[])(data[2 .. 4]))[0];
 		loadSequence(data, base);
 	}
-	private void loadSequence(const(ubyte)[] data, ushort base) @system {
+	private void loadSequence(const(ubyte)[] data, ushort base) @safe {
 		ubyte[65536] buffer;
 		loadAllSubpacks(buffer, data);
 		decompileSong(buffer[], currentSong, base, cast(int)(base + data.length));
@@ -858,7 +848,7 @@ struct NSPCPlayer {
 		}
 	}
 
-	private void decompileSong(ubyte[] data, ref Song song, int startAddress, int endAddress) @system {
+	private void decompileSong(ubyte[] data, ref Song song, int startAddress, int endAddress) @safe {
 		ushort[] subTable;
 		int firstPattern;
 		int tracksStart;
@@ -971,7 +961,7 @@ struct NSPCPlayer {
 			}
 
 			t.size = cast(int)(next - start - trackEnd.length);
-			t.track = &(new ubyte[](t.size + 1))[0];
+			t.track = new ubyte[](t.size + 1);
 			t.track[0 .. t.size] = data[start .. start + t.size];
 			t.track[t.size] = 0;
 
@@ -1000,7 +990,7 @@ struct NSPCPlayer {
 						subend = nextCode(subend);
 					}
 					st.size = cast(int)(&subend[0] - &substart[0]);
-					st.track = &(new ubyte[](st.size + 1))[0];
+					st.track = new ubyte[](st.size + 1);
 					st.track[0 .. st.size + 1] = substart[0 .. st.size + 1];
 					internalValidateTrack(st.track[0 .. st.size], true);
 				}
@@ -1041,7 +1031,7 @@ struct NSPCPlayer {
 
 			short* p = cast(short*) GC.malloc(allocationSize * short.sizeof);
 			assert(p, "malloc failed in BRR decoding");
-			samp[sn].data = p;
+			samp[sn].data = p[0 .. allocationSize];
 
 			int needsAnotherLoop;
 			int firstBlock = true;
@@ -1076,12 +1066,12 @@ struct NSPCPlayer {
 						//	samp[sn].data[sa.length - sa.loopLength],
 						//	samp[sn].data[sa.length - sa.loopLength + 1]);
 						ptrdiff_t diff = samp[sn].length;
-						short* newStuff = cast(short*) GC.realloc(samp[sn].data, (samp[sn].length + samp[sn].loopLength + 1) * short.sizeof);
+						short* newStuff = cast(short*) GC.realloc(&samp[sn].data[0], (samp[sn].length + samp[sn].loopLength + 1) * short.sizeof);
 						assert(newStuff, "realloc failed in BRR decoding");
 						p = newStuff + diff;
 						idx = 0;
 						samp[sn].length += samp[sn].loopLength;
-						samp[sn].data = newStuff;
+						samp[sn].data = newStuff[0 .. samp[sn].length + 1];
 					} else {
 						samp[sn].loopLength = fullLoopLength;
 						// needsAnotherLoop is already false
