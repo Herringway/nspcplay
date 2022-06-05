@@ -848,7 +848,7 @@ struct NSPCPlayer {
 		tracef("Loading NSPC - so: %X, i: %X, sa: %X", header.songBase, header.instrumentBase, header.sampleBase);
 		loadAllSubpacks(buffer[], data[NSPCFileHeader.sizeof .. $]);
 		processInstruments(buffer, header.instrumentBase, header.sampleBase);
-		decompileSong(buffer[], currentSong, header.songBase, cast(int)(header.songBase + data.length));
+		decompileSong(buffer[], currentSong, header.songBase, buffer.length - 1);
 	}
 
 	private void processInstruments(ubyte[] buffer, ushort instrumentBase, ushort sampleBase) @system {
