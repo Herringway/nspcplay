@@ -50,6 +50,7 @@ extern (C) void _sampling_func(void* user, ubyte* buf, int bufSize) nothrow {
 
 int main(string[] args) {
 	enum channels = 2;
+	bool verbose;
 	int sampleRate = 44100;
 	ushort speed = 500;
 	if (args.length < 2) {
@@ -58,12 +59,15 @@ int main(string[] args) {
 
 	auto help = getopt(args,
 		"f|samplerate", "Sets sample rate (Hz)", &sampleRate,
+		"v|verbose", "Print more verbose information", &verbose,
 		"s|speed", "Sets playback speed (500 is default)", &speed);
 	if (help.helpWanted) {
 		defaultGetoptPrinter("NSPC player", help.options);
 		return 1;
 	}
-	sharedLog = new FileLogger(stdout, LogLevel.trace);
+	if (verbose) {
+		sharedLog = new FileLogger(stdout, LogLevel.trace);
+	}
 
 	auto filePath = args[1];
 	auto file = cast(ubyte[])read(args[1]);

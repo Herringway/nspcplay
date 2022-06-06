@@ -845,6 +845,7 @@ struct NSPCPlayer {
 		instruments.reserve(maxInstruments);
 		foreach (idx, instrument; cast(Instrument[])(buffer[instrumentBase .. instrumentBase + maxInstruments * Instrument.sizeof])) {
 			instruments ~= instrument;
+			tracef("%s", instrument);
 		}
 	}
 
