@@ -806,7 +806,7 @@ struct NSPCPlayer {
 		decompileSong(buffer[], currentSong, base, cast(int)(base + data.length));
 	}
 	/// Load instruments from provided packs at the given addresses
-	void loadInstruments(const(ubyte)[][] packs, ushort instrumentBase, ushort sampleBase) @system {
+	void loadInstruments(const(ubyte)[][] packs, ushort instrumentBase, ushort sampleBase) @safe {
 		ubyte[65536] buffer;
 		foreach (pack; packs) {
 			loadAllSubpacks(buffer[], pack);
@@ -831,7 +831,7 @@ struct NSPCPlayer {
 	}
 
 	/// Load an NSPC file
-	void loadNSPCFile(const(ubyte)[] data) @system {
+	void loadNSPCFile(const(ubyte)[] data) @safe {
 		ubyte[65536] buffer;
 		auto header = (cast(const(NSPCFileHeader)[])(data[0 .. NSPCFileHeader.sizeof]))[0];
 		tracef("Loading NSPC - so: %X, i: %X, sa: %X", header.songBase, header.instrumentBase, header.sampleBase);
@@ -840,7 +840,7 @@ struct NSPCPlayer {
 		decompileSong(buffer[], currentSong, header.songBase, buffer.length - 1);
 	}
 
-	private void processInstruments(ubyte[] buffer, ushort instrumentBase, ushort sampleBase) @system {
+	private void processInstruments(ubyte[] buffer, ushort instrumentBase, ushort sampleBase) @safe {
 		decodeSamples(buffer, buffer[sampleBase .. sampleBase + 0x200]);
 		instruments.reserve(maxInstruments);
 		foreach (idx, instrument; cast(Instrument[])(buffer[instrumentBase .. instrumentBase + maxInstruments * Instrument.sizeof])) {
@@ -1000,7 +1000,7 @@ struct NSPCPlayer {
 		}
 	}
 
-	private void decodeSamples(ubyte[] buffer, const(ubyte)[] ptrtable) nothrow @system {
+	private void decodeSamples(ubyte[] buffer, const(ubyte)[] ptrtable) nothrow @safe {
 		for (uint sn = 0; sn < 128; sn++) {
 			int start = ptrtable[0] | (ptrtable[1] << 8);
 			int loop = ptrtable[2] | (ptrtable[3] << 8);
@@ -1029,9 +1029,8 @@ struct NSPCPlayer {
 
 			size_t allocationSize = samp[sn].length + 1;
 
-			short* p = cast(short*) GC.malloc(allocationSize * short.sizeof);
-			assert(p, "malloc failed in BRR decoding");
-			samp[sn].data = p[0 .. allocationSize];
+			samp[sn].data = new short[](allocationSize);
+			short[] p = samp[sn].data;
 
 			int needsAnotherLoop;
 			int firstBlock = true;
@@ -1062,16 +1061,11 @@ struct NSPCPlayer {
 
 					if (fullLoopLength == -1) {
 						needsAnotherLoop = true;
-						//printf("We need another loop! sample %02X (old loop start samples: %d %d)\n", (unsigned)sn,
-						//	samp[sn].data[sa.length - sa.loopLength],
-						//	samp[sn].data[sa.length - sa.loopLength + 1]);
-						ptrdiff_t diff = samp[sn].length;
-						short* newStuff = cast(short*) GC.realloc(&samp[sn].data[0], (samp[sn].length + samp[sn].loopLength + 1) * short.sizeof);
-						assert(newStuff, "realloc failed in BRR decoding");
-						p = newStuff + diff;
+						const diff = samp[sn].length;
 						idx = 0;
 						samp[sn].length += samp[sn].loopLength;
-						samp[sn].data = newStuff[0 .. samp[sn].length + 1];
+						samp[sn].data.length += samp[sn].loopLength;
+						p = samp[sn].data[diff .. $];
 					} else {
 						samp[sn].loopLength = fullLoopLength;
 						// needsAnotherLoop is already false
@@ -1206,7 +1200,7 @@ private int sampleLength(const ubyte[] spcMemory, ushort start) nothrow @safe {
 	}
 }
 
-private int getFullLoopLength(const Sample sa, const short[2] nextBlock, int firstLoopStart) nothrow @system {
+private int getFullLoopLength(const Sample sa, const short[2] nextBlock, int firstLoopStart) nothrow @safe {
 	int loopStart = sa.length - sa.loopLength;
 	int noMatchFound = true;
 	while (loopStart >= firstLoopStart && noMatchFound) {
