@@ -825,6 +825,7 @@ struct NSPCPlayer {
 			}
 			base = (cast(const(ushort)[])(pack[2 .. 4]))[0];
 			tracef("Loading subpack to %X (%s bytes)", base, size);
+			enforce(base + size <= ushort.max, "Invalid pack - base + size exceeds 64KB memory limit");
 			buffer[base .. base + size] = pack[4 .. size + 4];
 			pack = pack[size + 4 .. $];
 		}
