@@ -177,6 +177,7 @@ struct NSPCPlayer {
 	private bool loopEnabled = true;
 
 	private enum maxInstruments = 64;
+	private enum maxSampleCount = 128;
 	///
 	void fillBuffer(short[2][] buffer) nothrow @safe {
 		foreach (ref sample; buffer) {
@@ -842,7 +843,7 @@ struct NSPCPlayer {
 	}
 
 	private void processInstruments(ubyte[] buffer, ushort instrumentBase, ushort sampleBase) @safe {
-		decodeSamples(buffer, buffer[sampleBase .. sampleBase + 0x200]);
+		decodeSamples(buffer, cast(ushort[2][])(buffer[sampleBase .. sampleBase + maxSampleCount * 4]));
 		instruments.reserve(maxInstruments);
 		foreach (idx, instrument; cast(Instrument[])(buffer[instrumentBase .. instrumentBase + maxInstruments * Instrument.sizeof])) {
 			instruments ~= instrument;
@@ -1002,11 +1003,10 @@ struct NSPCPlayer {
 		}
 	}
 
-	private void decodeSamples(ubyte[] buffer, const(ubyte)[] ptrtable) nothrow @safe {
+	private void decodeSamples(ubyte[] buffer, const ushort[2][] ptrtable) nothrow @safe {
 		for (uint sn = 0; sn < 128; sn++) {
-			int start = ptrtable[0] | (ptrtable[1] << 8);
-			int loop = ptrtable[2] | (ptrtable[3] << 8);
-			ptrtable = ptrtable[4 .. $];
+			int start = ptrtable[sn][0];
+			int loop = ptrtable[sn][1];
 
 			samp[sn].data = null;
 			if (start == 0 || start == 0xffff) {
