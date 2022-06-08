@@ -165,7 +165,7 @@ struct NSPCPlayer {
 	private Song currentSong;
 	private SongState state;
 	private int mixrate = 44100;
-	private int chmask = 255;
+	private ubyte chmask = 0b11111111;
 	private int timerSpeed = defaultSpeed;
 	private bool songPlaying;
 
@@ -1109,6 +1109,15 @@ struct NSPCPlayer {
 	/// Enable or disable song looping
 	public void looping(bool enabled) @safe {
 		loopEnabled = enabled;
+	}
+	/// Enable or disable a song channel
+	public void setChannelEnabled(ubyte channel, bool enabled) @safe {
+		const newChmask = 1 << channel;
+		if (enabled) {
+			chmask |= newChmask;
+		} else {
+			chmask &= ~newChmask;
+		}
 	}
 }
 
