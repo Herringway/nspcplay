@@ -96,7 +96,6 @@ private struct ChannelState {
 
 private struct Sample {
 	short[] data;
-	int length;
 	int loopLength;
 }
 
@@ -201,8 +200,8 @@ struct NSPCPlayer {
 
 				int ipos = state.chan[i].sampPos >> 15;
 
-				if (ipos > state.chan[i].samp.length) {
-					assert(0, format!"Sample position exceeds sample length! %d > %d"(ipos, state.chan[i].samp.length));
+				if (ipos >= state.chan[i].samp.data.length) {
+					assert(0, format!"Sample position exceeds sample length! %d > %d"(ipos, state.chan[i].samp.data.length));
 				}
 
 				if (state.chan[i].noteRelease != 0) {
@@ -220,13 +219,14 @@ struct NSPCPlayer {
 				double volume = state.chan[i].envelopeHeight / 128.0;
 				assert(state.chan[i].samp.data);
 				int s1 = state.chan[i].samp.data[ipos];
-				s1 += (state.chan[i].samp.data[ipos + 1] - s1) * (state.chan[i].sampPos & 0x7FFF) >> 15;
+				int s2 = (ipos + 1 == state.chan[i].samp.data.length) ? s1 : state.chan[i].samp.data[ipos + 1];
+				s1 += (s2 - s1) * (state.chan[i].sampPos & 0x7FFF) >> 15;
 
 				left += cast(int)(s1 * state.chan[i].leftVol * volume);
 				right += cast(int)(s1 * state.chan[i].rightVol * volume);
 
 				state.chan[i].sampPos += state.chan[i].noteFrequency;
-				if ((state.chan[i].sampPos >> 15) >= state.chan[i].samp.length) {
+				if ((state.chan[i].sampPos >> 15) >= state.chan[i].samp.data.length) {
 					if (state.chan[i].samp.loopLength) {
 						state.chan[i].sampPos -= state.chan[i].samp.loopLength << 15;
 					} else {
@@ -1005,8 +1005,8 @@ struct NSPCPlayer {
 
 	private void decodeSamples(ubyte[] buffer, const ushort[2][] ptrtable) nothrow @safe {
 		for (uint sn = 0; sn < 128; sn++) {
-			int start = ptrtable[sn][0];
-			int loop = ptrtable[sn][1];
+			const start = ptrtable[sn][0];
+			const loop = ptrtable[sn][1];
 
 			samp[sn].data = null;
 			if (start == 0 || start == 0xffff) {
@@ -1019,7 +1019,6 @@ struct NSPCPlayer {
 			}
 
 			int end = start + length;
-			samp[sn].length = (length / brrBlockSize) * 16;
 			// The LOOP bit only matters for the last brr block
 			if (buffer[start + length - brrBlockSize] & brrFlagLoop) {
 				if (loop < start || loop >= end) {
@@ -1029,43 +1028,36 @@ struct NSPCPlayer {
 			} else
 				samp[sn].loopLength = 0;
 
-			size_t allocationSize = samp[sn].length + 1;
-
-			samp[sn].data = new short[](allocationSize);
+			samp[sn].data = new short[]((length / brrBlockSize) * 16);
 			short[] p = samp[sn].data;
 
-			int needsAnotherLoop;
-			int firstBlock = true;
+			bool needsAnotherLoop;
 			int decodingStart = start;
 			int times = 0;
 
-			short p0, p1;
+			short[2] pExtra;
 			size_t idx;
 			do {
 				needsAnotherLoop = false;
 				for (int pos = decodingStart; pos < end; pos += brrBlockSize) {
-					decodeBRRBlock(p[idx * 16 .. (idx + 1) * 16], [p0, p1], buffer[pos .. pos + brrBlockSize], !!firstBlock);
-					p0 = p[idx * 16 + 14];
-					p1 = p[idx * 16 + 15];
+					decodeBRRBlock(p[idx * 16 .. (idx + 1) * 16], pExtra, buffer[pos .. pos + brrBlockSize]);
+					pExtra[0] = p[idx * 16 + 14];
+					pExtra[1] = p[idx * 16 + 15];
 					idx++;
-					firstBlock = false;
 				}
 
 				if (samp[sn].loopLength != 0) {
 					decodingStart = loop;
 
-					short[18] afterLoop;
-					afterLoop[0] = p0;
-					afterLoop[1] = p1;
+					short[16] afterLoop;
 
-					decodeBRRBlock(afterLoop[2 .. 18], afterLoop[0 .. 2], buffer[loop .. loop + brrBlockSize], false);
-					int fullLoopLength = getFullLoopLength(samp[sn], afterLoop[2 .. 4], (loop - start) / brrBlockSize * 16);
+					decodeBRRBlock(afterLoop, pExtra, buffer[loop .. loop + brrBlockSize]);
+					int fullLoopLength = getFullLoopLength(samp[sn], afterLoop[0 .. 2], (loop - start) / brrBlockSize * 16);
 
 					if (fullLoopLength == -1) {
 						needsAnotherLoop = true;
-						const diff = samp[sn].length;
+						const diff = samp[sn].data.length;
 						idx = 0;
-						samp[sn].length += samp[sn].loopLength;
 						samp[sn].data.length += samp[sn].loopLength;
 						p = samp[sn].data[diff .. $];
 					} else {
@@ -1080,9 +1072,6 @@ struct NSPCPlayer {
 			} while (needsAnotherLoop && times < 128);
 
 			assert(!needsAnotherLoop, "Sample took too many iterations to get into a cycle");
-
-			// Put an extra sample at the end for easier interpolation
-			p[idx * 16] = samp[sn].loopLength != 0 ? samp[sn].data[samp[sn].length - samp[sn].loopLength] : 0;
 		}
 	}
 
@@ -1123,17 +1112,10 @@ struct NSPCPlayer {
 	}
 }
 
-private void decodeBRRBlock(short[] buffer, short[2] initial, const ubyte[] block, bool firstBlock) nothrow @safe {
+private void decodeBRRBlock(short[] buffer, short[2] lastSamples, const ubyte[] block) nothrow @safe {
 	int range = block[0] >> 4;
 	int filter = (block[0] >> 2) & 3;
 
-	if (firstBlock) {
-		// According to SPC_DSP, the header is ignored on key on.
-		// Not enforcing this could result in a read out of bounds, if the filter is nonzero.
-		range = 0;
-		filter = 0;
-	}
-	short[2] lastSamples = initial;
 	for (int i = 2; i < 18; i++) {
 		int s = block[i / 2];
 
@@ -1203,8 +1185,8 @@ private int sampleLength(const ubyte[] spcMemory, ushort start) nothrow @safe {
 }
 
 private int getFullLoopLength(const Sample sa, const short[2] nextBlock, int firstLoopStart) nothrow @safe {
-	int loopStart = sa.length - sa.loopLength;
-	int noMatchFound = true;
+	auto loopStart = cast(int)(sa.data.length - sa.loopLength);
+	bool noMatchFound = true;
 	while (loopStart >= firstLoopStart && noMatchFound) {
 		// If the first two samples in a loop are the same, the rest all will be too.
 		// BRR filters can rely on, at most, two previous samples.
@@ -1216,7 +1198,7 @@ private int getFullLoopLength(const Sample sa, const short[2] nextBlock, int fir
 	}
 
 	if (loopStart >= firstLoopStart) {
-		return sa.length - loopStart;
+		return cast(int)(sa.data.length - loopStart);
 	} else {
 		return -1;
 	}
