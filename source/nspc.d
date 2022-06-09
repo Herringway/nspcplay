@@ -1125,8 +1125,8 @@ private void decodeBRRBlock(scope short[] buffer, short[2] lastSamples, const sc
 	int range = block[0] >> 4;
 	int filter = (block[0] >> 2) & 3;
 
-	for (int i = 2; i < 18; i++) {
-		int s = block[i / 2];
+	for (int i = 0; i < 16; i++) {
+		int s = block[i / 2 + 1];
 
 		if (i % 2 == 0) {
 			s >>= 4;
@@ -1159,22 +1159,13 @@ private void decodeBRRBlock(scope short[] buffer, short[2] lastSamples, const sc
 
 		s *= 2;
 
-		// Clamp to [-65536, 65534] and then have it wrap around at
-		// [-32768, 32767]
-		if (s < -0x10000) {
-			s = (-0x10000 + 0x10000);
-		} else if (s > 0xFFFE) {
-			s = (0xFFFE - 0x10000);
-		} else if (s < -0x8000) {
-			s += 0x10000;
-		} else if (s > 0x7FFF) {
-			s -= 0x10000;
+		if (cast(short) s != s) {
+			s = (s >> 31) ^ 0x7FFF;
 		}
 
 		lastSamples[0] = lastSamples[1];
 		lastSamples[1] = cast(short) s;
-		buffer[0] = cast(short) s;
-		buffer = buffer[1 .. $];
+		buffer[i] = cast(short) s;
 	}
 }
 
