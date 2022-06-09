@@ -249,7 +249,7 @@ struct NSPCPlayer {
 		p.noteLen = c.noteLen;
 	}
 
-	private inout(ubyte)[] nextCode(inout(ubyte)[] p) nothrow @safe {
+	private inout(ubyte)[] nextCode(return scope inout(ubyte)[] p) nothrow @safe {
 		ubyte chr = p[0];
 		p = p[1 .. $];
 		if (chr < 0x80) {
@@ -399,7 +399,7 @@ struct NSPCPlayer {
 
 	// do a Ex/Fx code
 	private void doCommand(ref SongState st, ref ChannelState c) nothrow @safe {
-		ubyte[] p = c.ptr;
+		const p = c.ptr;
 		c.ptr = c.ptr[1 + codeLength[p[0] - 0xE0] .. $];
 		switch (p[0]) {
 			case 0xE0:
@@ -814,7 +814,7 @@ struct NSPCPlayer {
 		}
 		processInstruments(buffer, instrumentBase, sampleBase);
 	}
-	private void loadAllSubpacks(ubyte[] buffer, const(ubyte)[] pack) @safe {
+	private void loadAllSubpacks(scope ubyte[] buffer, const(ubyte)[] pack) @safe {
 		ushort size, base;
 		while (true) {
 			if (pack.length == 0) {
@@ -842,7 +842,7 @@ struct NSPCPlayer {
 		decompileSong(buffer[], currentSong, header.songBase, buffer.length - 1);
 	}
 
-	private void processInstruments(ubyte[] buffer, ushort instrumentBase, ushort sampleBase) @safe {
+	private void processInstruments(scope ubyte[] buffer, ushort instrumentBase, ushort sampleBase) @safe {
 		decodeSamples(buffer, cast(ushort[2][])(buffer[sampleBase .. sampleBase + maxSampleCount * 4]));
 		instruments.reserve(maxInstruments);
 		foreach (idx, instrument; cast(Instrument[])(buffer[instrumentBase .. instrumentBase + maxInstruments * Instrument.sizeof])) {
@@ -851,7 +851,7 @@ struct NSPCPlayer {
 		}
 	}
 
-	private void decompileSong(ubyte[] data, ref Song song, int startAddress, int endAddress) @safe {
+	private void decompileSong(scope ubyte[] data, ref Song song, int startAddress, int endAddress) @safe {
 		ushort[] subTable;
 		int firstPattern;
 		int tracksStart;
@@ -1003,7 +1003,7 @@ struct NSPCPlayer {
 		}
 	}
 
-	private void decodeSamples(ubyte[] buffer, const ushort[2][] ptrtable) nothrow @safe {
+	private void decodeSamples(scope ubyte[] buffer, const scope ushort[2][] ptrtable) nothrow @safe {
 		for (uint sn = 0; sn < 128; sn++) {
 			const start = ptrtable[sn][0];
 			const loop = ptrtable[sn][1];
@@ -1013,7 +1013,7 @@ struct NSPCPlayer {
 				continue;
 			}
 
-			int length = sampleLength(buffer, cast(ushort) start);
+			int length = sampleLength(buffer, start);
 			if (length == -1) {
 				continue;
 			}
@@ -1041,8 +1041,7 @@ struct NSPCPlayer {
 				needsAnotherLoop = false;
 				for (int pos = decodingStart; pos < end; pos += brrBlockSize) {
 					decodeBRRBlock(p[idx * 16 .. (idx + 1) * 16], pExtra, buffer[pos .. pos + brrBlockSize]);
-					pExtra[0] = p[idx * 16 + 14];
-					pExtra[1] = p[idx * 16 + 15];
+					pExtra[] = p[idx * 16 + 14 .. idx * 16 + 16];
 					idx++;
 				}
 
@@ -1121,7 +1120,7 @@ struct NSPCPlayer {
 	}
 }
 
-private void decodeBRRBlock(short[] buffer, short[2] lastSamples, const ubyte[] block) nothrow @safe {
+private void decodeBRRBlock(scope short[] buffer, short[2] lastSamples, const scope ubyte[] block) nothrow @safe {
 	int range = block[0] >> 4;
 	int filter = (block[0] >> 2) & 3;
 
@@ -1178,7 +1177,7 @@ private void decodeBRRBlock(short[] buffer, short[2] lastSamples, const ubyte[] 
 	}
 }
 
-private int sampleLength(const ubyte[] spcMemory, ushort start) nothrow @safe {
+private int sampleLength(const scope ubyte[] spcMemory, ushort start) nothrow @safe {
 	int end = start;
 	ubyte b;
 	do {
