@@ -959,8 +959,9 @@ struct NSPCPlayer {
 				}
 			}
 			// Determine the end of the track.
-			const(ubyte)[] trackEnd;
-			for (trackEnd = data[start .. next]; trackEnd.length > 0 && trackEnd[0] != 0; trackEnd = nextCode(trackEnd)) {
+			const(ubyte)[] trackEnd = data[start .. next];
+			while (trackEnd.length > 0 && trackEnd[0] != 0) {
+				trackEnd = nextCode(trackEnd);
 			}
 
 			t.size = cast(int)(next - start - trackEnd.length);
