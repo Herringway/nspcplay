@@ -1,0 +1,9 @@
+{
+	"description": "NSPC builder",
+	"license": "BSD 3-clause",
+	"name": "mknspc",
+	"targetType": "executable",
+	"dependencies": {
+		"nspcplay": "*"
+	}
+}

@@ -1,0 +1,63 @@
+import std;
+import nspc;
+
+enum Mode {
+	undefined,
+	spc
+}
+
+void main(string[] args) {
+	enum validArgs = ["spc"];
+	if (args.length == 1) {
+		stderr.writefln!"Missing argument - valid options are %-('%s', %)"(validArgs);
+		return;
+	}
+	switch (args[1].toLower) {
+		case "spc":
+			buildNSPCFromSPC(args[0] ~ args[2 .. $]);
+			break;
+		default:
+			stderr.writefln!"Invalid argument - valid options are %-('%s', %)"(validArgs);
+			break;
+	}
+}
+
+void buildNSPCFromSPC(string[] args) {
+	NSPCFileHeader header;
+	void handleIntegers(string opt, string value) {
+		ushort val;
+		if (value.startsWith("0x")) {
+			val = value[2 .. $].to!ushort(16);
+		} else {
+			val = value.to!ushort(10);
+		}
+		switch (opt) {
+			case "s|songaddress":
+				header.songBase = val;
+				break;
+			case "a|sampleaddress":
+				header.sampleBase = val;
+				break;
+			case "i|instrumentaddress":
+				header.instrumentBase = val;
+				break;
+			default:
+				throw new Exception("Unknown option "~opt);
+		}
+	}
+	auto helpInfo = getopt(args,
+		"s|songaddress", "Address of song data", &handleIntegers,
+		"a|sampleaddress", "Address of sample data", &handleIntegers,
+		"i|instrumentaddress", "Address of instrument data", &handleIntegers,
+	);
+	if (helpInfo.helpWanted || (args.length == 1)) {
+		defaultGetoptPrinter(format!"NSPC creation tool (SPC conversion)\nUsage: %s spc <filename.spc>"(args[0]), helpInfo.options);
+		return;
+	}
+	auto spcFile = cast(ubyte[])read(args[1]);
+	auto f = File(args[1].baseName.withExtension(".nspc"), "w");
+	f.rawWrite([header]);
+	f.rawWrite(cast(ushort[])[65535, 0]);
+	f.rawWrite(spcFile[0x100 .. 0x100FF]);
+	f.rawWrite(cast(ushort[])[0]);
+}

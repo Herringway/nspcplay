@@ -4,6 +4,7 @@
 	"name": "nspcplay",
 	"subPackages": [
 		"player",
-		"ebextract"
+		"ebextract",
+		"mknspc"
 	]
 }
