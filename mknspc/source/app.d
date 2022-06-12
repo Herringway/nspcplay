@@ -49,7 +49,9 @@ void buildNSPCFromSPC(string[] args) {
 				throw new Exception("Unknown option "~opt);
 		}
 	}
+	string filename;
 	auto helpInfo = getopt(args,
+		"o|output", "Filename to write to (defaults to filename.nspc)", &filename,
 		"s|songaddress", "Address of song data", &handleIntegers,
 		"a|sampleaddress", "Address of sample data", &handleIntegers,
 		"i|instrumentaddress", "Address of instrument data", &handleIntegers,
@@ -58,8 +60,11 @@ void buildNSPCFromSPC(string[] args) {
 		defaultGetoptPrinter(format!"NSPC creation tool (SPC conversion)\nUsage: %s spc <filename.spc>"(args[0]), helpInfo.options);
 		return;
 	}
+	if (!filename) {
+		filename = args[1].baseName.withExtension(".nspc").text;
+	}
 	auto spcFile = cast(ubyte[])read(args[1]);
-	auto f = File(args[1].baseName.withExtension(".nspc"), "w");
+	auto f = File(filename, "w");
 	f.rawWrite([header]);
 	f.rawWrite(cast(ushort[])[65535, 0]);
 	f.rawWrite(spcFile[0x100 .. 0x100FF]);
