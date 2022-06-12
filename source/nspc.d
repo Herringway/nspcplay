@@ -873,7 +873,7 @@ struct NSPCPlayer {
 			}
 			base = (cast(const(ushort)[])(pack[2 .. 4]))[0];
 			tracef("Loading subpack to %X (%s bytes)", base, size);
-			enforce(base + size <= ushort.max, "Invalid pack - base + size exceeds 64KB memory limit");
+			enforce!NSPCException(base + size <= ushort.max, "Invalid pack - base + size exceeds 64KB memory limit");
 			buffer[base .. base + size] = pack[4 .. size + 4];
 			pack = pack[size + 4 .. $];
 		}
@@ -946,7 +946,7 @@ struct NSPCPlayer {
 			}
 			return id;
 		}
-		enforce(phraseCount > 0, "No phrases in song");
+		enforce!NSPCException(phraseCount > 0, "No phrases in song");
 		song.order.length = phraseCount + 1;
 		index++;
 
@@ -975,7 +975,7 @@ struct NSPCPlayer {
 			} else {
 				order.type = PhraseType.pattern;
 				int pat = phrases[idx] - firstPattern;
-				enforce(!(pat & 15), format!"Bad pattern pointer: %x"(pat + firstPattern));
+				enforce!NSPCException(!(pat & 15), format!"Bad pattern pointer: %x"(pat + firstPattern));
 				order.id = cast(ushort)(pat >> 4);
 			}
 			idx++;
@@ -988,7 +988,7 @@ struct NSPCPlayer {
 			tracksStart = wpO[index];
 		}
 		patBytes = tracksStart - firstPattern;
-		enforce(patBytes > 0, format!"Bad first track pointer: %x"(tracksStart));
+		enforce!NSPCException(patBytes > 0, format!"Bad first track pointer: %x"(tracksStart));
 
 		if (startAddress + index * 2 + 1 >= endAddress) {
 			// no tracks in the song
@@ -998,7 +998,7 @@ struct NSPCPlayer {
 			int tp, tpp = tracksStart;
 			while ((tp = read!ushort(data, tpp -= 2)) == 0) {}
 
-			enforce(tp.inRange(tracksStart, endAddress - 1), format!"Bad last track pointer: %x"(tp));
+			enforce!NSPCException(tp.inRange(tracksStart, endAddress - 1), format!"Bad last track pointer: %x"(tp));
 
 			// is the last track the first one in its pattern?
 			bool first = true;
@@ -1029,7 +1029,7 @@ struct NSPCPlayer {
 			if (start == 0) {
 				continue;
 			}
-			enforce(start.inRange(tracksStart, tracksEnd - 1), format!"Bad track pointer: %x"(start));
+			enforce!NSPCException(start.inRange(tracksStart, tracksEnd - 1), format!"Bad track pointer: %x"(start));
 
 			// Go through track list (patterns) and find first track that has an address higher than us.
 			// If we find a track after us, we'll assume that this track doesn't overlap with that one.
@@ -1166,26 +1166,26 @@ struct NSPCPlayer {
 			int next = pos + 1;
 
 			if (byte_ < 0x80) {
-				enforce(byte_ != 0, "Track can not contain [00]");
+				enforce!NSPCException(byte_ != 0, "Track can not contain [00]");
 				if (next != data.length && data[next] < 0x80) {
 					next++;
 				}
-				enforce(next != data.length, "Track can not end with note-length code");
+				enforce!NSPCException(next != data.length, "Track can not end with note-length code");
 			} else if ((byte_ >= 0xCA) && (byte_ < 0xE0)) {
 				validateInstrument(byte_ - 0xCA, 0);
 			} else if (byte_ >= 0xE0) {
-				enforce(byte_ != 0xFF, "Invalid code [FF]");
+				enforce!NSPCException(byte_ != 0xFF, "Invalid code [FF]");
 				next += codeLength[byte_ - 0xE0];
-				enforce(next <= data.length, format!"Incomplete code: [%(%02X %)]"(data[pos .. pos + data.length]));
+				enforce!NSPCException(next <= data.length, format!"Incomplete code: [%(%02X %)]"(data[pos .. pos + data.length]));
 
 				if (byte_ == 0xE0) {
 					validateInstrument(data[pos + 1], percussionBase);
 				}
 				if (byte_ == 0xEF) {
-					enforce(!isSub, "Can't call sub from within a sub");
+					enforce!NSPCException(!isSub, "Can't call sub from within a sub");
 					int sub = (cast(ushort[]) data[pos + 1 .. pos + 3])[0];
-					enforce(sub < currentSong.sub.length, format!"Subroutine %d not present"(sub));
-					enforce(data[pos + 3] != 0, "Subroutine loop count can not be 0");
+					enforce!NSPCException(sub < currentSong.sub.length, format!"Subroutine %d not present"(sub));
+					enforce!NSPCException(data[pos + 3] != 0, "Subroutine loop count can not be 0");
 				}
 				if (byte_ == 0xFA) {
 					percussionBase = data[pos + 1];
@@ -1198,33 +1198,33 @@ struct NSPCPlayer {
 	private void validatePhrases() const @safe {
 		bool endFound;
 		foreach (phrase; currentSong.order) {
-			enforce(!endFound, "Phrases found after end of song");
+			enforce!NSPCException(!endFound, "Phrases found after end of song");
 			final switch (phrase.type) {
 				case PhraseType.end:
 					endFound = true;
 					break;
 				case PhraseType.fastForwardOn:
 				case PhraseType.fastForwardOff:
-					throw new Exception("Fast forward not yet supported");
+					throw new NSPCException("Fast forward not yet supported");
 				case PhraseType.jump:
 				case PhraseType.jumpLimited:
-					enforce(phrase.id < currentSong.order.length, "Cannot jump past end of song");
+					enforce!NSPCException(phrase.id < currentSong.order.length, "Cannot jump past end of song");
 					break;
 				case PhraseType.pattern:
 					break;
 			}
 		}
-		enforce(currentSong.order.length > 0, "No phrases loaded");
-		enforce(currentSong.order[$ - 1].type == PhraseType.end, "Phrase list must have an end phrase");
+		enforce!NSPCException(currentSong.order.length > 0, "No phrases loaded");
+		enforce!NSPCException(currentSong.order[$ - 1].type == PhraseType.end, "Phrase list must have an end phrase");
 	}
 	private void validateInstrument(size_t id, size_t base) const @safe {
 		if (id >= 0x80) {
 			id += base - 0xCA;
 		}
-		enforce(id <instruments.length, format!"instrument %s out of bounds!"(id));
+		enforce!NSPCException(id <instruments.length, format!"instrument %s out of bounds!"(id));
 		const idata = instruments[id];
-		enforce(samp[idata.sampleID].data, format!"no data for instrument %s"(id));
-		enforce((idata.tuning != 0) || (idata.tuningFraction != 0), format!"bad instrument %s"(id));
+		enforce!NSPCException(samp[idata.sampleID].data, format!"no data for instrument %s"(id));
+		enforce!NSPCException((idata.tuning != 0) || (idata.tuningFraction != 0), format!"bad instrument %s"(id));
 	}
 	/// Sets the playback speed. Default value is NSPCPlayer.defaultSpeed.
 	public void setSpeed(ushort rate) @safe {
@@ -1334,4 +1334,10 @@ private T read(T)(const(ubyte)[] data, size_t offset) {
 
 private bool inRange(T)(T val, T lower, T upper) {
 	return ((val >= lower) && (val <= upper));
+}
+
+class NSPCException : Exception {
+	this(string msg, string file = __FILE__, size_t line = __LINE__) @safe {
+		super(msg, file, line);
+	}
 }
