@@ -602,6 +602,7 @@ struct NSPCPlayer {
 	private void loadPattern() nothrow @safe {
 		state.ordnum++;
 		const nextPhrase = currentSong.order[state.ordnum];
+		debug tracef("Now playing %s", nextPhrase);
 		final switch (nextPhrase.type) {
 			case PhraseType.end:
 				state.ordnum--;
@@ -611,7 +612,10 @@ struct NSPCPlayer {
 				if (--state.repeatCount >= 0x80) {
 					state.repeatCount = cast(ubyte)nextPhrase.jumpTimes;
 				}
-				state.ordnum = nextPhrase.id - 1;
+				if (state.repeatCount > 0) {
+					state.ordnum = nextPhrase.id - 1;
+				}
+				debug tracef("%s more repeats", state.repeatCount);
 				loadPattern();
 				break;
 			case PhraseType.jump:
@@ -925,6 +929,26 @@ struct NSPCPlayer {
 			}
 			index++;
 		}
+		ushort phraseID(ushort address) {
+			ushort id;
+			const offset = (address - startAddress) >> 1;
+			uint o;
+			bool skip;
+			while ((o < offset) && (wpO[o] != 0)) {
+				if (wpO[o] < 0x80) {
+					skip = true;
+				} else if ((wpO[o] > 0x81) && (wpO[o] < 0x100)) {
+					skip = true;
+				}
+				if (!skip) {
+					id++;
+				} else {
+					skip = false;
+				}
+				o++;
+			}
+			return id;
+		}
 		enforce(phraseCount > 0, "No phrases in song");
 		song.order.length = phraseCount + 1;
 		index++;
@@ -946,11 +970,11 @@ struct NSPCPlayer {
 				order.type = PhraseType.jumpLimited;
 				order.jumpTimes = phrases[idx];
 				idx++;
-				order.id = cast(ushort)((phrases[idx] - startAddress) >> 1);
+				order.id = phraseID(phrases[idx]);
 			} else if ((phrases[idx] > 0x81) && (phrases[idx] < 0x100)) {
 				order.type = PhraseType.jump;
 				idx++;
-				order.id = cast(ushort)((phrases[idx] - startAddress) >> 1);
+				order.id = phraseID(phrases[idx]);
 			} else {
 				order.type = PhraseType.pattern;
 				int pat = phrases[idx] - firstPattern;
