@@ -110,9 +110,7 @@ private struct Parser {
 private struct Song {
 	ushort address;
 	ubyte changed;
-	int[] order;
-	int repeat;
-	int repeatPosition;
+	Phrase[] order;
 	Track[8][] pattern;
 	Track[] sub;
 }
@@ -141,6 +139,43 @@ private struct Instrument {
 	ubyte gain;
 	ubyte tuning;
 	ubyte tuningFraction;
+}
+
+enum PhraseType {
+	pattern,
+	jumpLimited,
+	jump,
+	end,
+	fastForwardOn,
+	fastForwardOff,
+}
+
+private struct Phrase {
+	PhraseType type;
+	ushort id;
+	ushort jumpTimes;
+	void toString(S)(ref S sink) const {
+		final switch (type) {
+			case PhraseType.pattern:
+				sink.formattedWrite!"Play pattern %s"(id);
+				break;
+			case PhraseType.jumpLimited:
+				sink.formattedWrite!"Jump to phrase %s %s times"(id, jumpTimes);
+				break;
+			case PhraseType.jump:
+				sink.formattedWrite!"Jump to phrase %s"(id);
+				break;
+			case PhraseType.end:
+				sink.formattedWrite!"End of song"();
+				break;
+			case PhraseType.fastForwardOn:
+				sink.formattedWrite!"Fast forward on"();
+				break;
+			case PhraseType.fastForwardOff:
+				sink.formattedWrite!"Fast forward off"();
+				break;
+		}
+	}
 }
 
 ///
@@ -566,32 +601,43 @@ struct NSPCPlayer {
 
 	private void loadPattern() nothrow @safe {
 		state.ordnum++;
-		if (state.ordnum >= currentSong.order.length) {
-			if (--state.repeatCount >= 0x80) {
-				if (loopEnabled) {
-					state.repeatCount = cast(ubyte) currentSong.repeat;
-				} else {
-					state.repeatCount = 0;
-				}
-			}
-			if (state.repeatCount == 0) {
+		const nextPhrase = currentSong.order[state.ordnum];
+		final switch (nextPhrase.type) {
+			case PhraseType.end:
 				state.ordnum--;
 				songPlaying = false;
 				return;
-			}
-			state.ordnum = currentSong.repeatPosition;
+			case PhraseType.jumpLimited:
+				if (--state.repeatCount >= 0x80) {
+					state.repeatCount = cast(ubyte)nextPhrase.jumpTimes;
+				}
+				state.ordnum = nextPhrase.id - 1;
+				loadPattern();
+				break;
+			case PhraseType.jump:
+				if (loopEnabled) {
+					state.ordnum = nextPhrase.id - 1;
+					loadPattern();
+				} else {
+					state.ordnum--;
+					songPlaying = false;
+				}
+				break;
+			case PhraseType.fastForwardOn:
+				assert(0, "Not yet implemented");
+			case PhraseType.fastForwardOff:
+				assert(0, "Not yet implemented");
+			case PhraseType.pattern:
+				foreach (idx, ref channel; state.chan) {
+					channel.ptr = currentSong.pattern[nextPhrase.id][idx].track;
+					channel.subCount = 0;
+					channel.volume.cycles = 0;
+					channel.panning.cycles = 0;
+					channel.next = 0;
+				}
+				state.patpos = 0;
+				break;
 		}
-
-		int pat = currentSong.order[state.ordnum];
-
-		foreach (idx, ref channel; state.chan) {
-			channel.ptr = currentSong.pattern[pat][idx].track;
-			channel.subCount = 0;
-			channel.volume.cycles = 0;
-			channel.panning.cycles = 0;
-			channel.next = 0;
-		}
-		state.patpos = 0;
 	}
 
 	private void CF7(ref ChannelState c) nothrow @safe {
@@ -864,40 +910,64 @@ struct NSPCPlayer {
 		// many patterns there are, so the pattern pointers aren't validated yet)
 		const ushort[] wpO = cast(ushort[]) data[startAddress .. $ -  ($ - startAddress) % 2];
 		uint index;
-		while (wpO[index] >= 0x100) {
+		uint phraseCount;
+		bool skipNextShort;
+		while (wpO[index] != 0) {
+			if (wpO[index] < 0x80) {
+				skipNextShort = true;
+			} else if ((wpO[index] > 0x81) && (wpO[index] < 0x100)) {
+				skipNextShort = true;
+			}
+			if (!skipNextShort) {
+				phraseCount++;
+			} else {
+				skipNextShort = false;
+			}
 			index++;
 		}
-		song.order.length = index;
-		enforce(song.order.length > 0, "Order length is 0");
-		song.repeat = wpO[index];
+		enforce(phraseCount > 0, "No phrases in song");
+		song.order.length = phraseCount + 1;
 		index++;
-		if (song.repeat == 0) {
-			song.repeatPosition = 0;
-		} else {
-			int repeatOff = wpO[index] - startAddress;
-			index++;
-			enforce(!(repeatOff & 1) && repeatOff.inRange(0, song.order.length * 2 - 1), format!"Bad repeat pointer: %x"(repeatOff + startAddress));
-			enforce(wpO[index] == 0, "Repeat not followed by end of song");
-			index++;
-			song.repeatPosition = repeatOff >> 1;
-		}
 
 		const fpIndex = index;
 		firstPattern = startAddress + index * 2;
 
-		// locate first track, determine number of patterns
-		while (index < wpO.length && wpO[index] == 0) {
-			index++;
+		const phrases = wpO[0 .. index];
+		// Now the number of patterns is known, so go back and get the order
+		size_t idx;
+		foreach (ref order; song.order) {
+			if (phrases[idx] == 0) {
+				order.type = PhraseType.end;
+			} else if (phrases[idx] == 0x80) {
+				order.type = PhraseType.fastForwardOn;
+			} else if (phrases[idx] == 0x81) {
+				order.type = PhraseType.fastForwardOff;
+			} else if (phrases[idx] < 0x80) {
+				order.type = PhraseType.jumpLimited;
+				order.jumpTimes = phrases[idx];
+				idx++;
+				order.id = cast(ushort)((phrases[idx] - startAddress) >> 1);
+			} else if ((phrases[idx] > 0x81) && (phrases[idx] < 0x100)) {
+				order.type = PhraseType.jump;
+				idx++;
+				order.id = cast(ushort)((phrases[idx] - startAddress) >> 1);
+			} else {
+				order.type = PhraseType.pattern;
+				int pat = phrases[idx] - firstPattern;
+				enforce(!(pat & 15), format!"Bad pattern pointer: %x"(pat + firstPattern));
+				order.id = cast(ushort)(pat >> 4);
+			}
+			idx++;
 		}
+		// locate first track
 		if (index >= wpO.length) {
 			// no tracks in the song
 			tracksStart = endAddress - 1;
 		} else {
 			tracksStart = wpO[index];
 		}
-
 		patBytes = tracksStart - firstPattern;
-		enforce((patBytes > 0) && !(patBytes & 15), format!"Bad first track pointer: %x"(tracksStart));
+		enforce(patBytes > 0, format!"Bad first track pointer: %x"(tracksStart));
 
 		if (startAddress + index * 2 + 1 >= endAddress) {
 			// no tracks in the song
@@ -924,15 +994,8 @@ struct NSPCPlayer {
 			tracksEnd = cast(ushort)(data.length - end.length - 1);
 		}
 
-		// Now the number of patterns is known, so go back and get the order
-		song.order = new int[](song.order.length);
-		index = 0;
-		foreach (ref order; song.order) {
-			int pat = wpO[index] - firstPattern;
-			index++;
-			enforce(pat.inRange(0, patBytes - 1) && !(pat & 15), format!"Bad pattern pointer: %x"(pat + firstPattern));
-			order = pat >> 4;
-		}
+		tracef("Phrases: %(%s, %)", song.order);
+		validatePhrases();
 
 		subTable = null;
 		song.pattern = new Track[8][](patBytes >> 4);
@@ -1101,6 +1164,28 @@ struct NSPCPlayer {
 
 			pos = next;
 		}
+	}
+	private void validatePhrases() const @safe {
+		bool endFound;
+		foreach (phrase; currentSong.order) {
+			enforce(!endFound, "Phrases found after end of song");
+			final switch (phrase.type) {
+				case PhraseType.end:
+					endFound = true;
+					break;
+				case PhraseType.fastForwardOn:
+				case PhraseType.fastForwardOff:
+					throw new Exception("Fast forward not yet supported");
+				case PhraseType.jump:
+				case PhraseType.jumpLimited:
+					enforce(phrase.id < currentSong.order.length, "Cannot jump past end of song");
+					break;
+				case PhraseType.pattern:
+					break;
+			}
+		}
+		enforce(currentSong.order.length > 0, "No phrases loaded");
+		enforce(currentSong.order[$ - 1].type == PhraseType.end, "Phrase list must have an end phrase");
 	}
 	/// Sets the playback speed. Default value is NSPCPlayer.defaultSpeed.
 	public void setSpeed(ushort rate) @safe {
