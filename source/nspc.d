@@ -1160,6 +1160,7 @@ struct NSPCPlayer {
 	}
 
 	private void validateTrack(ubyte[] data, bool isSub) @safe {
+		ubyte percussionBase;
 		for (int pos = 0; pos < data.length;) {
 			int byte_ = data[pos];
 			int next = pos + 1;
@@ -1171,20 +1172,23 @@ struct NSPCPlayer {
 				}
 				enforce(next != data.length, "Track can not end with note-length code");
 			} else if ((byte_ >= 0xCA) && (byte_ < 0xE0)) {
-				validateInstrument(byte_ - 0xCA);
+				validateInstrument(byte_ - 0xCA, 0);
 			} else if (byte_ >= 0xE0) {
 				enforce(byte_ != 0xFF, "Invalid code [FF]");
 				next += codeLength[byte_ - 0xE0];
 				enforce(next <= data.length, format!"Incomplete code: [%(%02X %)]"(data[pos .. pos + data.length]));
 
 				if (byte_ == 0xE0) {
-					validateInstrument(data[pos + 1]);
+					validateInstrument(data[pos + 1], percussionBase);
 				}
 				if (byte_ == 0xEF) {
 					enforce(!isSub, "Can't call sub from within a sub");
 					int sub = (cast(ushort[]) data[pos + 1 .. pos + 3])[0];
 					enforce(sub < currentSong.sub.length, format!"Subroutine %d not present"(sub));
 					enforce(data[pos + 3] != 0, "Subroutine loop count can not be 0");
+				}
+				if (byte_ == 0xFA) {
+					percussionBase = data[pos + 1];
 				}
 			}
 
@@ -1213,7 +1217,10 @@ struct NSPCPlayer {
 		enforce(currentSong.order.length > 0, "No phrases loaded");
 		enforce(currentSong.order[$ - 1].type == PhraseType.end, "Phrase list must have an end phrase");
 	}
-	private void validateInstrument(size_t id) const @safe {
+	private void validateInstrument(size_t id, size_t base) const @safe {
+		if (id >= 0x80) {
+			id += base - 0xCA;
+		}
 		enforce(id <instruments.length, format!"instrument %s out of bounds!"(id));
 		const idata = instruments[id];
 		enforce(samp[idata.sampleID].data, format!"no data for instrument %s"(id));
