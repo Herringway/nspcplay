@@ -348,24 +348,21 @@ struct NSPCPlayer {
 		s.target = cast(ubyte) target;
 	}
 
-	private void setInstrument(ref SongState st, ref ChannelState c, int inst) nothrow @safe {
+	private void setInstrument(ref SongState st, ref ChannelState c, uint inst) nothrow @safe {
 		// CA and up is for instruments in the second pack (set with FA xx)
 		if (inst >= 0x80) {
 			inst += st.firstCAInst - 0xCA;
 		}
 
-		if (inst < 0) {
-			assert(0, format!"instrument %X < 0"(inst));
-		}
-		if (inst >= 64) {
-			assert(0, format!"instrument %X > 64"(inst));
+		if (inst >= instruments.length) {
+			assert(0, format!"instrument %s out of bounds!"(inst));
 		}
 		const idata = instruments[inst];
 		if (!samp[idata.sampleID].data) {
-			assert(0, format!"no data for instrument %X"(inst));
+			assert(0, format!"no data for instrument %s"(inst));
 		}
 		if ((idata.tuning == 0) && (idata.tuningFraction == 0)) {
-			assert(0, format!"bad inst %X"(inst));
+			assert(0, format!"bad instrument %s"(inst));
 		}
 
 		c.inst = cast(ubyte) inst;
@@ -897,7 +894,7 @@ struct NSPCPlayer {
 		instruments.reserve(maxInstruments);
 		foreach (idx, instrument; cast(Instrument[])(buffer[instrumentBase .. instrumentBase + maxInstruments * Instrument.sizeof])) {
 			instruments ~= instrument;
-			tracef("%s", instrument);
+			tracef("%s. %s", idx, instrument);
 		}
 	}
 
@@ -1083,11 +1080,11 @@ struct NSPCPlayer {
 					st.size = cast(int)(&subend[0] - &substart[0]);
 					st.track = new ubyte[](st.size + 1);
 					st.track[0 .. st.size + 1] = substart[0 .. st.size + 1];
-					internalValidateTrack(st.track[0 .. st.size], true);
+					validateTrack(st.track[0 .. st.size], true);
 				}
 				(cast(ushort[])(p[1 .. 3]))[0] = cast(ushort) subEntry;
 			}
-			internalValidateTrack(t.track[0 .. t.size], false);
+			validateTrack(t.track[0 .. t.size], false);
 		}
 	}
 
@@ -1162,7 +1159,7 @@ struct NSPCPlayer {
 		}
 	}
 
-	private void internalValidateTrack(ubyte[] data, bool isSub) @safe {
+	private void validateTrack(ubyte[] data, bool isSub) @safe {
 		for (int pos = 0; pos < data.length;) {
 			int byte_ = data[pos];
 			int next = pos + 1;
@@ -1173,11 +1170,16 @@ struct NSPCPlayer {
 					next++;
 				}
 				enforce(next != data.length, "Track can not end with note-length code");
+			} else if ((byte_ >= 0xCA) && (byte_ < 0xE0)) {
+				validateInstrument(byte_ - 0xCA);
 			} else if (byte_ >= 0xE0) {
 				enforce(byte_ != 0xFF, "Invalid code [FF]");
 				next += codeLength[byte_ - 0xE0];
 				enforce(next <= data.length, format!"Incomplete code: [%(%02X %)]"(data[pos .. pos + data.length]));
 
+				if (byte_ == 0xE0) {
+					validateInstrument(data[pos + 1]);
+				}
 				if (byte_ == 0xEF) {
 					enforce(!isSub, "Can't call sub from within a sub");
 					int sub = (cast(ushort[]) data[pos + 1 .. pos + 3])[0];
@@ -1210,6 +1212,12 @@ struct NSPCPlayer {
 		}
 		enforce(currentSong.order.length > 0, "No phrases loaded");
 		enforce(currentSong.order[$ - 1].type == PhraseType.end, "Phrase list must have an end phrase");
+	}
+	private void validateInstrument(size_t id) const @safe {
+		enforce(id <instruments.length, format!"instrument %s out of bounds!"(id));
+		const idata = instruments[id];
+		enforce(samp[idata.sampleID].data, format!"no data for instrument %s"(id));
+		enforce((idata.tuning != 0) || (idata.tuningFraction != 0), format!"bad instrument %s"(id));
 	}
 	/// Sets the playback speed. Default value is NSPCPlayer.defaultSpeed.
 	public void setSpeed(ushort rate) @safe {
