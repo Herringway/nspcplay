@@ -111,19 +111,41 @@ void buildNSPCFromPackfiles(string[] args) {
 	}
 	auto f = File(filename, "w");
 	f.rawWrite([header]);
+	bool songAddressFound;
+	bool instrumentAddressFound;
+	bool sampleAddressFound;
 	foreach(file; args[1 .. $]) {
 		auto packFile = cast(ubyte[])read(file);
 		size_t offset;
 		while(true) {
+			if (offset >= packFile.length) {
+				break;
+			}
 			auto size = (cast(ushort[])(packFile[offset .. offset + 2]))[0];
 			if (size == 0) {
 				break;
 			}
 			auto spcOffset = (cast(ushort[])(packFile[offset + 2 .. offset + 4]))[0];
+			songAddressFound |= header.songBase.inRange(spcOffset, spcOffset + size);
+			sampleAddressFound |= header.sampleBase.inRange(spcOffset, spcOffset + size);
+			instrumentAddressFound |= header.instrumentBase.inRange(spcOffset, spcOffset + size);
 			infof("Song subpack: $%04X, %04X bytes", spcOffset, size);
 			f.rawWrite(packFile[offset .. offset + size + 4]);
 			offset += size + 4;
 		}
 	}
 	f.rawWrite(cast(ushort[])[0]);
+	if (!songAddressFound) {
+		warningf("Song address %04X not within provided data", header.songBase);
+	}
+	if (!instrumentAddressFound) {
+		warningf("Instrument address %04X not within provided data", header.instrumentBase);
+	}
+	if (!sampleAddressFound) {
+		warningf("Sample address %04X not within provided data", header.sampleBase);
+	}
+}
+
+bool inRange(T)(T val, T lower, T upper) {
+	return (val >= lower) && (val < upper);
 }
