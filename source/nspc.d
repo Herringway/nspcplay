@@ -214,6 +214,9 @@ struct NSPCPlayer {
 	private enum maxSampleCount = 128;
 	///
 	void fillBuffer(short[2][] buffer) nothrow @safe {
+		if (!songPlaying) {
+			return;
+		}
 		foreach (ref sample; buffer) {
 			if ((state.nextTimerTick -= timerSpeed) < 0) {
 				state.nextTimerTick += mixrate;
@@ -838,6 +841,9 @@ struct NSPCPlayer {
 	void play() @safe {
 		initialize(mixrate);
 		songPlaying = true;
+	}
+	void stop() @safe {
+		songPlaying = false;
 	}
 	/// Load a single sequence pack at a given address
 	void loadSequencePack(const(ubyte)[] data, ushort base) @safe {
