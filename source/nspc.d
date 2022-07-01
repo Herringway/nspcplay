@@ -226,49 +226,48 @@ struct NSPCPlayer {
 			}
 
 			int left = 0, right = 0;
-			int i;
-			for (int cm = chmask; cm; i++, cm >>= 1) {
-				if (!(cm & 1)) {
+			foreach (i, ref chan; state.chan) {
+				if (!(chmask & (1 << i))) {
 					continue;
 				}
 
-				if (state.chan[i].sampPos < 0) {
+				if (chan.sampPos < 0) {
 					continue;
 				}
 
-				int ipos = state.chan[i].sampPos >> 15;
+				int ipos = chan.sampPos >> 15;
 
-				if (ipos >= state.chan[i].samp.data.length) {
-					assert(0, format!"Sample position exceeds sample length! %d > %d"(ipos, state.chan[i].samp.data.length));
+				if (ipos >= chan.samp.data.length) {
+					assert(0, format!"Sample position exceeds sample length! %d > %d"(ipos, chan.samp.data.length));
 				}
 
-				if (state.chan[i].noteRelease != 0) {
-					if (state.chan[i].instADSR1 & 0x1F) {
-						state.chan[i].envelopeHeight *= state.chan[i].decayRate;
+				if (chan.noteRelease != 0) {
+					if (chan.instADSR1 & 0x1F) {
+						chan.envelopeHeight *= chan.decayRate;
 					}
 				} else {
 					// release takes about 15ms (not dependent on tempo)
-					state.chan[i].envelopeHeight -= (32000 / 512.0) / mixrate;
-					if (state.chan[i].envelopeHeight < 0) {
-						state.chan[i].sampPos = -1;
+					chan.envelopeHeight -= (32000 / 512.0) / mixrate;
+					if (chan.envelopeHeight < 0) {
+						chan.sampPos = -1;
 						continue;
 					}
 				}
-				double volume = state.chan[i].envelopeHeight / 128.0;
-				assert(state.chan[i].samp.data);
-				int s1 = state.chan[i].samp.data[ipos];
-				int s2 = (ipos + 1 == state.chan[i].samp.data.length) ? s1 : state.chan[i].samp.data[ipos + 1];
-				s1 += (s2 - s1) * (state.chan[i].sampPos & 0x7FFF) >> 15;
+				double volume = chan.envelopeHeight / 128.0;
+				assert(chan.samp.data);
+				int s1 = chan.samp.data[ipos];
+				int s2 = (ipos + 1 == chan.samp.data.length) ? s1 : chan.samp.data[ipos + 1];
+				s1 += (s2 - s1) * (chan.sampPos & 0x7FFF) >> 15;
 
-				left += cast(int)(s1 * state.chan[i].leftVol * volume);
-				right += cast(int)(s1 * state.chan[i].rightVol * volume);
+				left += cast(int)(s1 * chan.leftVol * volume);
+				right += cast(int)(s1 * chan.rightVol * volume);
 
-				state.chan[i].sampPos += state.chan[i].noteFrequency;
-				if ((state.chan[i].sampPos >> 15) >= state.chan[i].samp.data.length) {
-					if (state.chan[i].samp.loopLength) {
-						state.chan[i].sampPos -= state.chan[i].samp.loopLength << 15;
+				chan.sampPos += chan.noteFrequency;
+				if ((chan.sampPos >> 15) >= chan.samp.data.length) {
+					if (chan.samp.loopLength) {
+						chan.sampPos -= chan.samp.loopLength << 15;
 					} else {
-						state.chan[i].sampPos = -1;
+						chan.sampPos = -1;
 					}
 				}
 			}
