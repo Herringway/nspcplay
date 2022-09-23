@@ -52,7 +52,7 @@ int main(string[] args) {
 	enum channels = 2;
 	bool verbose;
 	int sampleRate = 44100;
-	ushort speed = 500;
+	ushort speed = NSPCPlayer.defaultSpeed;
 	if (args.length < 2) {
 		return 1;
 	}
