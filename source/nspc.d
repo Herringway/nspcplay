@@ -525,6 +525,7 @@ struct NSPCPlayer {
 				st.firstCAInst = p[1];
 				break;
 			default:
+				debug tracef("Unknown command: %02X", p[0]);
 				break;
 		}
 	}
