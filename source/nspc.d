@@ -905,10 +905,7 @@ struct NSPCPlayer {
 
 	private void decompileSong(scope ubyte[] data, ref Song song, int startAddress, int endAddress) @safe {
 		ushort[] subTable;
-		int firstPattern;
-		int tracksStart;
-		int tracksEnd;
-		int patBytes;
+		int patterns;
 		song.address = cast(ushort) startAddress;
 		song.changed = false;
 
@@ -956,7 +953,7 @@ struct NSPCPlayer {
 		index++;
 
 		const fpIndex = index;
-		firstPattern = startAddress + index * 2;
+		const firstPattern = startAddress + index * 2;
 
 		const phrases = wpO[0 .. index];
 		// Now the number of patterns is known, so go back and get the order
@@ -982,49 +979,16 @@ struct NSPCPlayer {
 				int pat = phrases[idx] - firstPattern;
 				enforce!NSPCException(!(pat & 15), format!"Bad pattern pointer: %x"(pat + firstPattern));
 				order.id = cast(ushort)(pat >> 4);
+				patterns = max((pat >> 4) + 1, patterns);
 			}
 			idx++;
-		}
-		// locate first track
-		if (index >= wpO.length) {
-			// no tracks in the song
-			tracksStart = endAddress - 1;
-		} else {
-			tracksStart = wpO[index];
-		}
-		patBytes = tracksStart - firstPattern;
-		enforce!NSPCException(patBytes > 0, format!"Bad first track pointer: %x"(tracksStart));
-
-		if (startAddress + index * 2 + 1 >= endAddress) {
-			// no tracks in the song
-			tracksEnd = endAddress - 1;
-		} else {
-			// find the last track
-			int tp, tpp = tracksStart;
-			while ((tp = read!ushort(data, tpp -= 2)) == 0) {}
-
-			enforce!NSPCException(tp.inRange(tracksStart, endAddress - 1), format!"Bad last track pointer: %x"(tp));
-
-			// is the last track the first one in its pattern?
-			bool first = true;
-			int chan = (tpp - firstPattern) >> 1 & 7;
-			for (; chan; chan--) {
-				first &= read!ushort(data, tpp -= 2) == 0;
-			}
-
-			const(ubyte)[] end = data[tp .. endAddress];
-			while (end[0]) {
-				end = nextCode(end);
-			}
-			end = end[first .. $];
-			tracksEnd = cast(ushort)(data.length - end.length - 1);
 		}
 
 		tracef("Phrases: %(%s, %)", song.order);
 		validatePhrases();
 
 		subTable = null;
-		song.pattern = new Track[8][](patBytes >> 4);
+		song.pattern = new Track[8][](patterns);
 		song.sub = null;
 
 		index = fpIndex;
@@ -1034,7 +998,6 @@ struct NSPCPlayer {
 			if (start == 0) {
 				continue;
 			}
-			enforce!NSPCException(start.inRange(tracksStart, tracksEnd - 1), format!"Bad track pointer: %x"(start));
 
 			// Go through track list (patterns) and find first track that has an address higher than us.
 			// If we find a track after us, we'll assume that this track doesn't overlap with that one.
