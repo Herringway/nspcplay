@@ -887,6 +887,9 @@ struct NSPCPlayer {
 
 	/// Load an NSPC file
 	void loadNSPCFile(const(ubyte)[] data) @safe {
+		if (songPlaying) {
+			stop();
+		}
 		ubyte[65536] buffer;
 		auto header = (cast(const(NSPCFileHeader)[])(data[0 .. NSPCFileHeader.sizeof]))[0];
 		tracef("Loading NSPC - so: %X, i: %X, sa: %X", header.songBase, header.instrumentBase, header.sampleBase);
@@ -897,6 +900,7 @@ struct NSPCPlayer {
 
 	private void processInstruments(scope ubyte[] buffer, ushort instrumentBase, ushort sampleBase) @safe {
 		decodeSamples(buffer, cast(ushort[2][])(buffer[sampleBase .. sampleBase + maxSampleCount * 4]));
+		instruments = [];
 		instruments.reserve(maxInstruments);
 		foreach (idx, instrument; cast(Instrument[])(buffer[instrumentBase .. instrumentBase + maxInstruments * Instrument.sizeof])) {
 			instruments ~= instrument;
@@ -907,6 +911,7 @@ struct NSPCPlayer {
 	private void decompileSong(scope ubyte[] data, ref Song song, int startAddress, int endAddress) @safe {
 		ushort[] subTable;
 		int patterns;
+		song = song.init;
 		song.address = cast(ushort) startAddress;
 		song.changed = false;
 
