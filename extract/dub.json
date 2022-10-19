@@ -1,7 +1,7 @@
 {
 	"description": "NSPC extractor",
 	"license": "BSD 3-clause",
-	"name": "ebextract",
+	"name": "extract",
 	"targetType": "executable",
 	"dependencies": {
 		"nspcplay": "*"
