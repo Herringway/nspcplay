@@ -25,7 +25,7 @@ void main(string[] args) {
 	auto songPointers = cast(ushort[])rom[SONG_POINTER_TABLE .. SONG_POINTER_TABLE + ushort.sizeof * NUM_SONGS];
 	foreach (idx, songPacks; bgmPacks) {
 		infof("Song ID: 0x%03X", idx);
-		auto file = File(format!"songs/%03X.nspc"(idx), "w");
+		auto file = File(buildPath(args[2], format!"%03X.nspc"(idx)), "w");
 		void writePack(ubyte pack) {
 			size_t offset = packTable[pack].full - 0xC00000;
 			while(true) {
