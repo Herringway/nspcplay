@@ -121,8 +121,14 @@ private struct Track {
 }
 
 // note style tables, from 6F80
-private immutable ubyte[8] releaseTable = [0x33, 0x66, 0x7f, 0x99, 0xb2, 0xcc, 0xe5, 0xfc];
-private immutable ubyte[16] volumeTable = [0x19, 0x33, 0x4c, 0x66, 0x72, 0x7f, 0x8c, 0x99, 0xa5, 0xb2, 0xbf, 0xcc, 0xd8, 0xe5, 0xf2, 0xfc];
+private immutable ubyte[8][] releaseTables = [
+	[0x33, 0x66, 0x7F, 0x99, 0xB2, 0xCC, 0xE5, 0xFC],
+	[0x65, 0x7F, 0x98, 0xB2, 0xCB, 0xE5, 0xF2, 0xFC], // Some HAL games
+];
+private immutable ubyte[16][] volumeTables = [
+	[0x19, 0x33, 0x4C, 0x66, 0x72, 0x7F, 0x8C, 0x99, 0xA5, 0xB2, 0xBF, 0xCC, 0xD8, 0xE5, 0xF2, 0xFC],
+	[0x4C, 0x59, 0x6D, 0x7F, 0x87, 0x8E, 0x98, 0xA0, 0xA8, 0xB2, 0xBF, 0xCB, 0xD8, 0xE5, 0xF2, 0xFC] // Some HAL games
+];
 
 // number of bytes following a Ex/Fx code
 private immutable ubyte[32] codeLength = [1, 1, 2, 3, 0, 1, 2, 1, 2, 1, 1, 3, 0, 1, 2, 3, 1, 3, 3, 0, 1, 3, 0, 3, 3, 3, 1, 2, 0, 0, 0, 0];
@@ -189,8 +195,12 @@ struct NSPCFileHeader {
 	ushort instrumentBase;
 	/// Base SPC address of the samples
 	ushort sampleBase;
+	/// Release table to use
+	ubyte releaseTable;
+	/// Volume table to use
+	ubyte volumeTable;
 	/// Reserved for future usage
-	ubyte[22] reserved;
+	ubyte[20] reserved;
 }
 
 ///
@@ -212,6 +222,8 @@ struct NSPCPlayer {
 
 	private enum maxInstruments = 64;
 	private enum maxSampleCount = 128;
+	size_t volumeTable;
+	size_t releaseTable;
 	///
 	short[2][] fillBuffer(short[2][] buffer) nothrow @safe {
 		if (!songPlaying) {
@@ -325,7 +337,7 @@ struct NSPCPlayer {
 		v = ~(v * c.tremoloRange >> 8) & 0xFF;
 
 		v = v * (st.volume.cur >> 8) >> 8;
-		v = v * volumeTable[c.noteStyle & 15] >> 8;
+		v = v * volumeTables[volumeTable][c.noteStyle & 15] >> 8;
 		v = v * (c.volume.cur >> 8) >> 8;
 		c.totalVol = v * v >> 8;
 	}
@@ -590,7 +602,7 @@ struct NSPCPlayer {
 			// if the note will be continued, don't release yet
 			rel = c.noteLen;
 		} else {
-			rel = (c.noteLen * releaseTable[c.noteStyle >> 4]) >> 8;
+			rel = (c.noteLen * releaseTables[releaseTable][c.noteStyle >> 4]) >> 8;
 			if (rel > c.noteLen - 2) {
 				rel = c.noteLen - 2;
 			}
@@ -895,6 +907,10 @@ struct NSPCPlayer {
 		ubyte[65536] buffer;
 		auto header = (cast(const(NSPCFileHeader)[])(data[0 .. NSPCFileHeader.sizeof]))[0];
 		tracef("Loading NSPC - so: %X, i: %X, sa: %X", header.songBase, header.instrumentBase, header.sampleBase);
+		volumeTable = header.volumeTable;
+		releaseTable = header.releaseTable;
+		assert(volumeTable < volumeTables.length, "Invalid volume table");
+		assert(releaseTable < releaseTables.length, "Invalid release table");
 		loadAllSubpacks(buffer[], data[NSPCFileHeader.sizeof .. $]);
 		processInstruments(buffer, header.instrumentBase, header.sampleBase);
 		decompileSong(buffer[], currentSong, header.songBase, buffer.length - 1);
