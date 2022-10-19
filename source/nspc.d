@@ -539,7 +539,7 @@ struct NSPCPlayer {
 				st.firstCAInst = p[1];
 				break;
 			default:
-				debug tracef("Unknown command: %02X", p[0]);
+				debug(nspclogging) tracef("Unknown command: %02X", p[0]);
 				break;
 		}
 	}
@@ -616,7 +616,7 @@ struct NSPCPlayer {
 	private void loadPattern() nothrow @safe {
 		state.ordnum++;
 		const nextPhrase = currentSong.order[state.ordnum];
-		debug tracef("Now playing %s", nextPhrase);
+		debug(nspclogging) tracef("Now playing %s", nextPhrase);
 		final switch (nextPhrase.type) {
 			case PhraseType.end:
 				state.ordnum--;
@@ -629,7 +629,7 @@ struct NSPCPlayer {
 				if (state.repeatCount > 0) {
 					state.ordnum = nextPhrase.id - 1;
 				}
-				debug tracef("%s more repeats", state.repeatCount);
+				debug(nspclogging) tracef("%s more repeats", state.repeatCount);
 				loadPattern();
 				break;
 			case PhraseType.jump:
@@ -892,7 +892,7 @@ struct NSPCPlayer {
 				break;
 			}
 			base = (cast(const(ushort)[])(pack[2 .. 4]))[0];
-			tracef("Loading subpack to %X (%s bytes)", base, size);
+			debug(nspclogging) tracef("Loading subpack to %X (%s bytes)", base, size);
 			enforce!NSPCException(base + size <= ushort.max, "Invalid pack - base + size exceeds 64KB memory limit");
 			buffer[base .. base + size] = pack[4 .. size + 4];
 			pack = pack[size + 4 .. $];
@@ -906,7 +906,7 @@ struct NSPCPlayer {
 		}
 		ubyte[65536] buffer;
 		auto header = (cast(const(NSPCFileHeader)[])(data[0 .. NSPCFileHeader.sizeof]))[0];
-		tracef("Loading NSPC - so: %X, i: %X, sa: %X", header.songBase, header.instrumentBase, header.sampleBase);
+		debug(nspclogging) tracef("Loading NSPC - so: %X, i: %X, sa: %X", header.songBase, header.instrumentBase, header.sampleBase);
 		volumeTable = header.volumeTable;
 		releaseTable = header.releaseTable;
 		assert(volumeTable < volumeTables.length, "Invalid volume table");
@@ -922,7 +922,7 @@ struct NSPCPlayer {
 		instruments.reserve(maxInstruments);
 		foreach (idx, instrument; cast(Instrument[])(buffer[instrumentBase .. instrumentBase + maxInstruments * Instrument.sizeof])) {
 			instruments ~= instrument;
-			tracef("%s. %s", idx, instrument);
+			debug(nspclogging) tracef("%s. %s", idx, instrument);
 		}
 	}
 
@@ -1008,7 +1008,7 @@ struct NSPCPlayer {
 			idx++;
 		}
 
-		tracef("Phrases: %(%s, %)", song.order);
+		debug(nspclogging) tracef("Phrases: %(%s, %)", song.order);
 		validatePhrases();
 
 		subTable = null;
