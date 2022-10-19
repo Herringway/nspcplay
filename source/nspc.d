@@ -213,10 +213,11 @@ struct NSPCPlayer {
 	private enum maxInstruments = 64;
 	private enum maxSampleCount = 128;
 	///
-	void fillBuffer(short[2][] buffer) nothrow @safe {
+	short[2][] fillBuffer(short[2][] buffer) nothrow @safe {
 		if (!songPlaying) {
-			return;
+			return [];
 		}
+		size_t length;
 		foreach (ref sample; buffer) {
 			if ((state.nextTimerTick -= timerSpeed) < 0) {
 				state.nextTimerTick += mixrate;
@@ -224,7 +225,7 @@ struct NSPCPlayer {
 					break;
 				}
 			}
-
+			length++;
 			int left = 0, right = 0;
 			foreach (i, ref chan; state.chan) {
 				if (!(chmask & (1 << i))) {
@@ -276,6 +277,7 @@ struct NSPCPlayer {
 			sample[0] = cast(short) left;
 			sample[1] = cast(short) right;
 		}
+		return buffer[0 .. length];
 	}
 
 	private void parserInit(ref Parser p, ChannelState c) nothrow @safe {

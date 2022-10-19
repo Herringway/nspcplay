@@ -133,8 +133,8 @@ void dumpWav(ref NSPCPlayer player, uint sampleRate, ushort channels, string fil
 	player.looping = false;
 	short[2][] samples;
 	while (player.isPlaying) {
-		samples.length += 4096;
-		player.fillBuffer(samples[$ - 4096 .. $]);
+		short[2][4096] buffer;
+		samples ~= player.fillBuffer(buffer[]);
 	}
 	auto file = File(filename, "w");
 	WAVFile header;
