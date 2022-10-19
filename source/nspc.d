@@ -927,6 +927,7 @@ struct NSPCPlayer {
 		debug(nspclogging) tracef("Loading NSPC - so: %X, i: %X, sa: %X", header.songBase, header.instrumentBase, header.sampleBase);
 		volumeTable = header.volumeTable;
 		releaseTable = header.releaseTable;
+		debug(nspclogging) tracef("Release table: %s, volume table: %s", header.releaseTable, header.volumeTable);
 		assert(volumeTable < volumeTables.length, "Invalid volume table");
 		assert(releaseTable < releaseTables.length, "Invalid release table");
 		loadAllSubpacks(buffer[], data[NSPCFileHeader.sizeof .. $]);
