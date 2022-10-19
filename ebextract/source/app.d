@@ -1,6 +1,8 @@
 import std;
 import std.experimental.logger;
 
+import nspc;
+
 enum NUM_SONGS = 0xBF;
 enum NUM_PACKS = 0xA9;
 enum BGM_PACK_TABLE = 0x4F70A;
@@ -14,15 +16,6 @@ align(1) struct PackPointer {
 	uint full() {
 		return addr + ((cast(uint)bank) << 16);
 	}
-}
-
-struct NSPCFileHeader {
-	align(1):
-	uint variant;
-	ushort songBase;
-	ushort instrumentBase;
-	ushort sampleBase;
-	ubyte[22] reserved;
 }
 
 void main(string[] args) {
@@ -50,6 +43,8 @@ void main(string[] args) {
 		header.songBase = songPointers[idx];
 		header.instrumentBase = 0x6E00;
 		header.sampleBase = 0x6C00;
+		header.volumeTable = VolumeTable.hal1;
+		header.releaseTable = ReleaseTable.hal1;
 		infof("Song Base: $%04X", header.songBase);
 		file.rawWrite([header]);
 		if (songPacks[2] == 0xFF) {
