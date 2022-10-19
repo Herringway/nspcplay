@@ -1217,6 +1217,9 @@ struct NSPCPlayer {
 			chmask &= ~newChmask;
 		}
 	}
+	bool isPlaying() const pure @safe {
+		return songPlaying;
+	}
 }
 
 private void decodeBRRBlock(scope short[] buffer, short[2] lastSamples, const scope ubyte[] block) nothrow @safe {

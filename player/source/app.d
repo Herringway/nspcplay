@@ -53,12 +53,14 @@ int main(string[] args) {
 	bool verbose;
 	int sampleRate = 44100;
 	ushort speed = NSPCPlayer.defaultSpeed;
+	string outfile;
 	if (args.length < 2) {
 		return 1;
 	}
 
 	auto help = getopt(args,
 		"f|samplerate", "Sets sample rate (Hz)", &sampleRate,
+		"o|outfile", "Dumps output to file", &outfile,
 		"v|verbose", "Print more verbose information", &verbose,
 		"s|speed", "Sets playback speed (500 is default)", &speed);
 	if (help.helpWanted) {
@@ -86,15 +88,60 @@ int main(string[] args) {
 
 	nspc.setSpeed(speed);
 
-	// Prepare to play music
-	if (!initAudio(&_sampling_func, channels, sampleRate, &nspc)) {
-		return 1;
+	if (outfile != "") {
+		dumpWav(nspc, sampleRate, channels, outfile);
+	} else {
+		// Prepare to play music
+		if (!initAudio(&_sampling_func, channels, sampleRate, &nspc)) {
+			return 1;
+		}
+		trace("SDL audio init success");
+
+
+		writeln("Press enter to exit");
+		readln();
 	}
-	trace("SDL audio init success");
-
-
-	writeln("Press enter to exit");
-	readln();
 
 	return 0;
+}
+
+struct WAVFile {
+	align(1):
+	char[4] riffSignature = "RIFF";
+	uint fileSize;
+	char[4] wavSignature = "WAVE";
+	char[4] fmtChunkSignature = "fmt ";
+	uint fmtLength = 16;
+	ushort format = 1;
+	ushort channels;
+	uint sampleRate;
+	uint secondSize;
+	ushort sampleSize;
+	ushort bitsPerSample;
+	char[4] dataSignature = "data";
+	uint dataSize;
+	void recalcSizes(size_t sampleCount) @safe pure {
+		assert(sampleCount <= uint.max, "Too many samples");
+		sampleSize = cast(ushort)(channels * bitsPerSample / 8);
+		secondSize = sampleRate * sampleSize;
+		dataSize = cast(uint)(sampleCount * sampleSize);
+		fileSize = cast(uint)(WAVFile.sizeof - 8 + dataSize);
+	}
+}
+
+void dumpWav(ref NSPCPlayer player, uint sampleRate, ushort channels, string filename) {
+	player.looping = false;
+	short[2][] samples;
+	while (player.isPlaying) {
+		samples.length += 4096;
+		player.fillBuffer(samples[$ - 4096 .. $]);
+	}
+	auto file = File(filename, "w");
+	WAVFile header;
+	header.sampleRate = 44100;
+	header.channels = channels;
+	header.bitsPerSample = 16;
+	header.recalcSizes(samples.length);
+	file.rawWrite([header]);
+	file.rawWrite(samples);
 }
