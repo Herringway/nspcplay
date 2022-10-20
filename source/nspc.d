@@ -275,8 +275,8 @@ struct NSPCPlayer {
 
 	private enum maxInstruments = 64;
 	private enum maxSampleCount = 128;
-	size_t volumeTable;
-	size_t releaseTable;
+	private size_t volumeTable;
+	private size_t releaseTable;
 	///
 	short[2][] fillBuffer(short[2][] buffer) nothrow @safe {
 		if (!songPlaying) {
