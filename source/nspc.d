@@ -56,7 +56,7 @@ private struct ChannelState {
 	ubyte subCount; // number of loops
 
 	ubyte inst; // instrument
-	ubyte instADSR1;
+	ADSRGain instADSRGain;
 	ubyte finetune;
 	byte transpose;
 	Slider panning = Slider(0x0A00);
@@ -236,9 +236,7 @@ private enum brrFlagLoop = 2;
 private struct Instrument {
 	align(1):
 	ubyte sampleID;
-	ubyte adsr0;
-	ubyte adsr1;
-	ubyte gain;
+	ADSRGain adsrGain;
 	ubyte tuning;
 	ubyte tuningFraction;
 }
@@ -246,24 +244,20 @@ private struct Instrument {
 private struct PrototypeInstrument {
 	align(1):
 	ubyte sampleID;
-	ubyte adsr0;
-	ubyte adsr1;
-	ubyte gain;
+	ADSRGain adsrGain;
 	ubyte tuning;
 	Instrument opCast(T: Instrument)() {
-		return Instrument(sampleID, adsr0, adsr1, gain, tuning, 0);
+		return Instrument(sampleID, adsrGain, tuning, 0);
 	}
 }
 private struct PrototypePercussion {
 	align(1):
 	ubyte sampleID;
-	ubyte adsr0;
-	ubyte adsr1;
-	ubyte gain;
+	ADSRGain adsrGain;
 	ubyte tuning;
 	ubyte note;
 	Instrument opCast(T: Instrument)() {
-		return Instrument(sampleID, adsr0, adsr1, gain, tuning, 0);
+		return Instrument(sampleID, adsrGain, tuning, 0);
 	}
 }
 
@@ -274,6 +268,15 @@ enum PhraseType {
 	end,
 	fastForwardOn,
 	fastForwardOff,
+}
+
+align(1) private struct ADSRGain {
+	align(1):
+	ushort adsr;
+	ubyte gain;
+	ubyte sustainRate() const @safe pure nothrow {
+		return (adsr & 0x1F00) >> 8;
+	}
 }
 
 private struct Phrase {
@@ -389,7 +392,7 @@ struct NSPCPlayer {
 				}
 
 				if (chan.noteRelease != 0) {
-					if (chan.instADSR1 & 0x1F) {
+					if (chan.instADSRGain.sustainRate) {
 						chan.envelopeHeight *= chan.decayRate;
 					}
 				} else {
@@ -517,9 +520,9 @@ struct NSPCPlayer {
 		}
 
 		c.inst = cast(ubyte) inst;
-		c.instADSR1 = idata.adsr1;
-		if (c.instADSR1 & 0x1F) {
-			int i = c.instADSR1 & 0x1F;
+		c.instADSRGain = idata.adsrGain;
+		if (c.instADSRGain.sustainRate) {
+			int i = c.instADSRGain.sustainRate;
 			// calculate the constant to multiply envelope height by on each sample
 			int halflife;
 			if (i >= 30) {
