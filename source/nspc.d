@@ -148,6 +148,16 @@ enum VolumeTable : ubyte {
 	hal3,
 }
 
+enum VCMDClass {
+	terminator,
+	noteDuration,
+	note,
+	tie,
+	rest,
+	percussion,
+	special,
+}
+
 enum VCMD {
 	instrument,
 	panning,
@@ -502,7 +512,26 @@ struct NSPCPlayer {
 		}
 		return disp; /*   \/ */
 	}
-
+	VCMDClass getCommandClass(ubyte val) nothrow @safe {
+		if (variant == Variant.standard) {
+			if (val == 0) {
+				return VCMDClass.terminator;
+			} else if (val < 0x80) {
+				return VCMDClass.noteDuration;
+			} else if (val < 0xC8) {
+				return VCMDClass.note;
+			} else if (val == 0xC8) {
+				return VCMDClass.tie;
+			} else if (val == 0xC9) {
+				return VCMDClass.rest;
+			} else if (val < 0xE0) {
+				return VCMDClass.percussion;
+			} else  {
+				return VCMDClass.special;
+			}
+		}
+		assert(0, "Undefined command class");
+	}
 	VCMD getCommand(ubyte val) nothrow @safe {
 		switch (val) {
 			case 0xE0: return VCMD.instrument;
@@ -817,35 +846,41 @@ struct NSPCPlayer {
 
 			if (--c.next >= 0) {
 				CF7(c);
-			} else
-				while (1) {
+			} else {
+				loop: while (1) {
 					const ubyte[] p = c.ptr[0 .. $];
-
-					if (p[0] == 0) { // end of sub or pattern
-						if (c.subCount) { // end of sub
-							c.ptr = --c.subCount ? currentSong.sub[c.subStart].track : c.subRet;
-						} else {
+					final switch (getCommandClass(p[0])) {
+						case VCMDClass.terminator:
+							if (c.subCount) { // end of sub
+								c.ptr = --c.subCount ? currentSong.sub[c.subStart].track : c.subRet;
+								break;
+							}
 							return false;
-						}
-					} else if (p[0] < 0x80) {
-						c.noteLen = p[0];
-						if (p[1] < 0x80) {
-							c.noteStyle = p[1];
-							c.ptr = c.ptr[2 .. $];
-						} else {
+						case VCMDClass.noteDuration:
+							c.noteLen = p[0];
+							if (p[1] < 0x80) {
+								c.noteStyle = p[1];
+								c.ptr = c.ptr[2 .. $];
+							} else {
+								c.ptr = c.ptr[1 .. $];
+							}
+							break;
+						case VCMDClass.note:
+						case VCMDClass.tie:
+						case VCMDClass.rest:
+						case VCMDClass.percussion:
 							c.ptr = c.ptr[1 .. $];
-						}
-					} else if (p[0] < 0xE0) {
-						c.ptr = c.ptr[1 .. $];
-						c.next = c.noteLen - 1;
-						doNote(st, c, p[0]);
-						break;
-					} else { // E0-FF
-						doCommand(st, c);
+							c.next = c.noteLen - 1;
+							doNote(st, c, p[0]);
+							break loop;
+						case VCMDClass.special:
+							doCommand(st, c);
+							break;
 					}
 				}
+			}
 			// $0B84
-			if (c.note.cycles == 0 && c.ptr[0] == 0xF9) {
+			if ((c.note.cycles == 0) && (getCommandClass(c.ptr[0] == VCMDClass.special)) && (getCommand(c.ptr[0]) == VCMD.pitchSlideToNote)) {
 				doCommand(st, c);
 			}
 		}
