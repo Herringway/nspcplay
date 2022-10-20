@@ -148,6 +148,41 @@ enum VolumeTable : ubyte {
 	hal3,
 }
 
+enum VCMD {
+	instrument,
+	panning,
+	panningFade,
+	vibratoOn,
+	vibratoOff,
+	songVolume,
+	songVolumeFade,
+	tempo,
+	tempoFade,
+	globalAbsoluteTransposition,
+	channelAbsoluteTransposition,
+	tremoloOn,
+	tremoloOff,
+	volume,
+	volumeFade,
+	subRoutine,
+	vibratoFadeIn,
+	notePitchEnvelopeTo,
+	notePitchEnvelopeFrom,
+	notePitchEnvelopeOff,
+	fineTune,
+	echoEnableBitsAndVolume,
+	echoOff,
+	echoParameterSetup,
+	echoVolumeFade,
+	pitchSlideToNote,
+	percussionBaseInstrumentRedefine,
+	noop,
+	channelMute,
+	fastForwardOn,
+	fastForwardOff,
+	invalid,
+}
+
 // number of bytes following a Ex/Fx code
 private immutable ubyte[32] codeLength = [1, 1, 2, 3, 0, 1, 2, 1, 2, 1, 1, 3, 0, 1, 2, 3, 1, 3, 3, 0, 1, 3, 0, 3, 3, 3, 1, 2, 0, 0, 0, 0];
 
@@ -463,101 +498,155 @@ struct NSPCPlayer {
 		return disp; /*   \/ */
 	}
 
+	VCMD getCommand(ubyte val) nothrow @safe {
+		switch (val) {
+			case 0xE0: return VCMD.instrument;
+			case 0xE1: return VCMD.panning;
+			case 0xE2: return VCMD.panningFade;
+			case 0xE3: return VCMD.vibratoOn;
+			case 0xE4: return VCMD.vibratoOff;
+			case 0xE5: return VCMD.songVolume;
+			case 0xE6: return VCMD.songVolumeFade;
+			case 0xE7: return VCMD.tempo;
+			case 0xE8: return VCMD.tempoFade;
+			case 0xE9: return VCMD.globalAbsoluteTransposition;
+			case 0xEA: return VCMD.channelAbsoluteTransposition;
+			case 0xEB: return VCMD.tremoloOn;
+			case 0xEC: return VCMD.tremoloOff;
+			case 0xED: return VCMD.volume;
+			case 0xEE: return VCMD.volumeFade;
+			case 0xEF: return VCMD.subRoutine;
+			case 0xF0: return VCMD.vibratoFadeIn;
+			case 0xF1: return VCMD.notePitchEnvelopeTo;
+			case 0xF2: return VCMD.notePitchEnvelopeFrom;
+			case 0xF3: return VCMD.notePitchEnvelopeOff;
+			case 0xF4: return VCMD.fineTune;
+			case 0xF5: return VCMD.echoEnableBitsAndVolume;
+			case 0xF6: return VCMD.echoOff;
+			case 0xF7: return VCMD.echoParameterSetup;
+			case 0xF8: return VCMD.echoVolumeFade;
+			case 0xF9: return VCMD.pitchSlideToNote;
+			case 0xFA: return VCMD.percussionBaseInstrumentRedefine;
+			case 0xFB: return VCMD.noop;
+			case 0xFC: return VCMD.channelMute;
+			case 0xFD: return VCMD.fastForwardOn;
+			case 0xFE: return VCMD.fastForwardOff;
+			case 0xFF: return VCMD.invalid;
+			default:
+				assumeWontThrow(errorf("Unknown command: %02X", val));
+				break;
+		}
+		return VCMD.invalid;
+	}
+
 	// do a Ex/Fx code
 	private void doCommand(ref SongState st, ref ChannelState c) nothrow @safe {
 		const p = c.ptr;
 		c.ptr = c.ptr[1 + codeLength[p[0] - 0xE0] .. $];
-		switch (p[0]) {
-			case 0xE0:
+		const command = getCommand(p[0]);
+		final switch (command) {
+			case VCMD.instrument:
 				setInstrument(st, c, p[1]);
 				break;
-			case 0xE1:
+			case VCMD.panning:
 				c.panFlags = p[1];
 				c.panning.cur = (p[1] & 0x1F) << 8;
 				break;
-			case 0xE2:
+			case VCMD.panningFade:
 				makeSlider(c.panning, p[1], p[2]);
 				break;
-			case 0xE3:
+			case VCMD.vibratoOn:
 				c.vibratoStart = p[1];
 				c.vibratoSpeed = p[2];
 				c.curVibRange = c.vibratoMaxRange = p[3];
 				c.vibratoFadeIn = 0;
 				break;
-			case 0xE4:
+			case VCMD.vibratoOff:
 				c.curVibRange = c.vibratoMaxRange = 0;
 				c.vibratoFadeIn = 0;
 				break;
-			case 0xE5:
+			case VCMD.songVolume:
 				st.volume.cur = p[1] << 8;
 				break;
-			case 0xE6:
+			case VCMD.songVolumeFade:
 				makeSlider(st.volume, p[1], p[2]);
 				break;
-			case 0xE7:
+			case VCMD.tempo:
 				st.tempo.cur = p[1] << 8;
 				break;
-			case 0xE8:
+			case VCMD.tempoFade:
 				makeSlider(st.tempo, p[1], p[2]);
 				break;
-			case 0xE9:
+			case VCMD.globalAbsoluteTransposition:
 				st.transpose = p[1];
 				break;
-			case 0xEA:
+			case VCMD.channelAbsoluteTransposition:
 				c.transpose = p[1];
 				break;
-			case 0xEB:
+			case VCMD.tremoloOn:
 				c.tremoloStart = p[1];
 				c.tremoloSpeed = p[2];
 				c.tremoloRange = p[3];
 				break;
-			case 0xEC:
+			case VCMD.tremoloOff:
 				c.tremoloRange = 0;
 				break;
-			case 0xED:
+			case VCMD.volume:
 				c.volume.cur = p[1] << 8;
 				break;
-			case 0xEE:
+			case VCMD.volumeFade:
 				makeSlider(c.volume, p[1], p[2]);
 				break;
-			case 0xEF:
+			case VCMD.subRoutine:
 				c.subStart = p[1] | (p[2] << 8);
 				c.subRet = c.ptr;
 				c.subCount = p[3];
 				c.ptr = currentSong.sub[c.subStart].track;
 				break;
-			case 0xF0:
+			case VCMD.vibratoFadeIn:
 				c.vibratoFadeIn = p[1];
 				c.vibratoRangeDelta = c.curVibRange / p[1];
 				break;
-			case 0xF1:
-			case 0xF2:
+			case VCMD.notePitchEnvelopeTo:
+			case VCMD.notePitchEnvelopeFrom:
 				c.portType = p[0] & 1;
 				c.portStart = p[1];
 				c.portLength = p[2];
 				c.portRange = p[3];
 				break;
-			case 0xF3:
+			case VCMD.notePitchEnvelopeOff:
 				c.portLength = 0;
 				break;
-			case 0xF4:
+			case VCMD.fineTune:
 				c.finetune = p[1];
 				break;
-			case 0xF9: {
-					c.curPortStartCtr = p[1];
-					int target = p[3] + st.transpose;
-					if (target >= 0x100) {
-						target -= 0xFF;
-					}
-					target += c.transpose;
-					makeSlider(c.note, p[2], target & 0x7F);
-					break;
+			case VCMD.echoEnableBitsAndVolume:
+			case VCMD.echoOff:
+			case VCMD.echoParameterSetup:
+			case VCMD.echoVolumeFade:
+				debug(nspclogging) warningf("Unhandled command: %s", command);
+				break;
+			case VCMD.noop: //do nothing
+				break;
+			case VCMD.pitchSlideToNote:
+				c.curPortStartCtr = p[1];
+				int target = p[3] + st.transpose;
+				if (target >= 0x100) {
+					target -= 0xFF;
 				}
-			case 0xFA:
+				target += c.transpose;
+				makeSlider(c.note, p[2], target & 0x7F);
+				break;
+			case VCMD.percussionBaseInstrumentRedefine:
 				st.firstCAInst = p[1];
 				break;
-			default:
-				debug(nspclogging) tracef("Unknown command: %02X", p[0]);
+			case VCMD.channelMute:
+			case VCMD.fastForwardOn:
+			case VCMD.fastForwardOff:
+				debug(nspclogging) warningf("Unhandled command: %s", command);
+				break;
+			case VCMD.invalid: //do nothing
+				assumeWontThrow(errorf("Invalid command"));
 				break;
 		}
 	}
