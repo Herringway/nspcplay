@@ -194,7 +194,40 @@ enum VCMD {
 }
 
 // number of bytes following a Ex/Fx code
-private immutable ubyte[32] codeLength = [1, 1, 2, 3, 0, 1, 2, 1, 2, 1, 1, 3, 0, 1, 2, 3, 1, 3, 3, 0, 1, 3, 0, 3, 3, 3, 1, 2, 0, 0, 0, 0];
+private immutable ubyte[VCMD.max + 1] codeLength = [
+	VCMD.instrument: 1,
+	VCMD.panning: 1,
+	VCMD.panningFade: 2,
+	VCMD.vibratoOn: 3,
+	VCMD.vibratoOff: 0,
+	VCMD.songVolume: 1,
+	VCMD.songVolumeFade: 2,
+	VCMD.tempo: 1,
+	VCMD.tempoFade: 2,
+	VCMD.globalAbsoluteTransposition: 1,
+	VCMD.channelAbsoluteTransposition: 1,
+	VCMD.tremoloOn: 3,
+	VCMD.tremoloOff: 0,
+	VCMD.volume: 1,
+	VCMD.volumeFade: 2,
+	VCMD.subRoutine: 3,
+	VCMD.vibratoFadeIn: 1,
+	VCMD.notePitchEnvelopeTo: 3,
+	VCMD.notePitchEnvelopeFrom: 3,
+	VCMD.notePitchEnvelopeOff: 0,
+	VCMD.fineTune: 1,
+	VCMD.echoEnableBitsAndVolume: 3,
+	VCMD.echoOff: 0,
+	VCMD.echoParameterSetup: 3,
+	VCMD.echoVolumeFade: 3,
+	VCMD.pitchSlideToNote: 3,
+	VCMD.percussionBaseInstrumentRedefine: 1,
+	VCMD.noop: 2,
+	VCMD.channelMute: 0,
+	VCMD.fastForwardOn: 0,
+	VCMD.fastForwardOff: 0,
+	VCMD.invalid: 0,
+];
 
 private enum brrBlockSize = 9;
 private enum brrFlagEnd = 1;
@@ -374,7 +407,8 @@ struct NSPCPlayer {
 		if (chr < 0x80) {
 			p = p[p[0] < 0x80 .. $];
 		} else if (chr >= 0xE0) {
-			p = p[codeLength[chr - 0xE0] .. $];
+			const command = getCommand(chr);
+			p = p[codeLength[command] .. $];
 		}
 		return p;
 	}
@@ -576,8 +610,8 @@ struct NSPCPlayer {
 	// do a Ex/Fx code
 	private void doCommand(ref SongState st, ref ChannelState c) nothrow @safe {
 		const p = c.ptr;
-		c.ptr = c.ptr[1 + codeLength[p[0] - 0xE0] .. $];
 		const command = getCommand(p[0]);
+		c.ptr = c.ptr[1 + codeLength[command] .. $];
 		final switch (command) {
 			case VCMD.instrument:
 				setInstrument(st, c, p[1]);
@@ -1315,8 +1349,9 @@ struct NSPCPlayer {
 			} else if ((byte_ >= 0xCA) && (byte_ < 0xE0)) {
 				validateInstrument(byte_ - 0xCA, 0);
 			} else if (byte_ >= 0xE0) {
-				enforce!NSPCException(byte_ != 0xFF, "Invalid code [FF]");
-				next += codeLength[byte_ - 0xE0];
+				const command = getCommand(cast(ubyte)byte_);
+				enforce!NSPCException(command != VCMD.invalid, format!"Invalid code [%02X]"(byte_));
+				next += codeLength[command];
 				enforce!NSPCException(next <= data.length, format!"Incomplete code: [%(%02X %)]"(data[pos .. pos + data.length]));
 
 				if (byte_ == 0xE0) {
