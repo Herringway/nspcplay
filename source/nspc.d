@@ -243,6 +243,30 @@ private struct Instrument {
 	ubyte tuningFraction;
 }
 
+private struct PrototypeInstrument {
+	align(1):
+	ubyte sampleID;
+	ubyte adsr0;
+	ubyte adsr1;
+	ubyte gain;
+	ubyte tuning;
+	Instrument opCast(T: Instrument)() {
+		return Instrument(sampleID, adsr0, adsr1, gain, tuning, 0);
+	}
+}
+private struct PrototypePercussion {
+	align(1):
+	ubyte sampleID;
+	ubyte adsr0;
+	ubyte adsr1;
+	ubyte gain;
+	ubyte tuning;
+	ubyte note;
+	Instrument opCast(T: Instrument)() {
+		return Instrument(sampleID, adsr0, adsr1, gain, tuning, 0);
+	}
+}
+
 enum PhraseType {
 	pattern,
 	jumpLimited,
@@ -282,11 +306,18 @@ private struct Phrase {
 
 enum Variant : uint {
 	standard = 0,
+	prototype = 1, // Early SNES games from Nintendo
 }
 
 ///
 struct NSPCFileHeader {
 	align(1):
+	static union Extra {
+		struct { //Variant.prototype
+			ushort percussionBase;
+		}
+		ubyte[20] reserved;
+	}
 	/// Which version of NSPC to use
 	Variant variant;
 	/// Base SPC address of the song's sequence data
@@ -299,8 +330,8 @@ struct NSPCFileHeader {
 	ReleaseTable releaseTable;
 	/// Volume table to use
 	VolumeTable volumeTable;
-	/// Reserved for future usage
-	ubyte[20] reserved;
+	/// Extra information for variants
+	Extra extra;
 }
 
 ///
@@ -325,6 +356,8 @@ struct NSPCPlayer {
 	private size_t volumeTable;
 	private size_t releaseTable;
 	private Variant variant;
+	private ubyte[256] percussionNotes;
+	private size_t percussionBase;
 	///
 	short[2][] fillBuffer(short[2][] buffer) nothrow @safe {
 		if (!songPlaying) {
@@ -469,11 +502,6 @@ struct NSPCPlayer {
 	}
 
 	private void setInstrument(ref SongState st, ref ChannelState c, uint inst) nothrow @safe {
-		// CA and up is for instruments in the second pack (set with FA xx)
-		if (inst >= 0x80) {
-			inst += st.firstCAInst - 0xCA;
-		}
-
 		if (inst >= instruments.length) {
 			assert(0, format!"instrument %s out of bounds!"(inst));
 		}
@@ -548,7 +576,7 @@ struct NSPCPlayer {
 		}
 		return disp; /*   \/ */
 	}
-	VCMDClass getCommandClass(ubyte val) nothrow @safe {
+	VCMDClass getCommandClass(ubyte val) const nothrow @safe {
 		if (variant == Variant.standard) {
 			if (val == 0) {
 				return VCMDClass.terminator;
@@ -565,45 +593,98 @@ struct NSPCPlayer {
 			} else  {
 				return VCMDClass.special;
 			}
+		} else if (variant == Variant.prototype) {
+			if (val == 0) {
+				return VCMDClass.terminator;
+			} else if (val < 0x80) {
+				return VCMDClass.noteDuration;
+			} else if (val < 0xC6) {
+				return VCMDClass.note;
+			} else if (val == 0xC6) {
+				return VCMDClass.tie;
+			} else if (val == 0xC7) {
+				return VCMDClass.rest;
+			} else if (val < 0xDA) {
+				return VCMDClass.percussion;
+			} else  {
+				return VCMDClass.special;
+			}
 		}
 		assert(0, "Undefined command class");
 	}
-	VCMD getCommand(ubyte val) nothrow @safe {
-		switch (val) {
-			case 0xE0: return VCMD.instrument;
-			case 0xE1: return VCMD.panning;
-			case 0xE2: return VCMD.panningFade;
-			case 0xE3: return VCMD.vibratoOn;
-			case 0xE4: return VCMD.vibratoOff;
-			case 0xE5: return VCMD.songVolume;
-			case 0xE6: return VCMD.songVolumeFade;
-			case 0xE7: return VCMD.tempo;
-			case 0xE8: return VCMD.tempoFade;
-			case 0xE9: return VCMD.globalAbsoluteTransposition;
-			case 0xEA: return VCMD.channelAbsoluteTransposition;
-			case 0xEB: return VCMD.tremoloOn;
-			case 0xEC: return VCMD.tremoloOff;
-			case 0xED: return VCMD.volume;
-			case 0xEE: return VCMD.volumeFade;
-			case 0xEF: return VCMD.subRoutine;
-			case 0xF0: return VCMD.vibratoFadeIn;
-			case 0xF1: return VCMD.notePitchEnvelopeTo;
-			case 0xF2: return VCMD.notePitchEnvelopeFrom;
-			case 0xF3: return VCMD.notePitchEnvelopeOff;
-			case 0xF4: return VCMD.fineTune;
-			case 0xF5: return VCMD.echoEnableBitsAndVolume;
-			case 0xF6: return VCMD.echoOff;
-			case 0xF7: return VCMD.echoParameterSetup;
-			case 0xF8: return VCMD.echoVolumeFade;
-			case 0xF9: return VCMD.pitchSlideToNote;
-			case 0xFA: return VCMD.percussionBaseInstrumentRedefine;
-			case 0xFB: return VCMD.noop;
-			case 0xFC: return VCMD.channelMute;
-			case 0xFD: return VCMD.fastForwardOn;
-			case 0xFE: return VCMD.fastForwardOff;
-			case 0xFF: return VCMD.invalid;
-			default:
-				break;
+	ubyte percussionID() const nothrow pure @safe {
+		if (variant == Variant.prototype) {
+			return 0xD0;
+		}
+		return 0xCA;
+	}
+	VCMD getCommand(ubyte val) const nothrow @safe {
+		if (variant == Variant.standard) {
+			switch (val) {
+				case 0xE0: return VCMD.instrument;
+				case 0xE1: return VCMD.panning;
+				case 0xE2: return VCMD.panningFade;
+				case 0xE3: return VCMD.vibratoOn;
+				case 0xE4: return VCMD.vibratoOff;
+				case 0xE5: return VCMD.songVolume;
+				case 0xE6: return VCMD.songVolumeFade;
+				case 0xE7: return VCMD.tempo;
+				case 0xE8: return VCMD.tempoFade;
+				case 0xE9: return VCMD.globalAbsoluteTransposition;
+				case 0xEA: return VCMD.channelAbsoluteTransposition;
+				case 0xEB: return VCMD.tremoloOn;
+				case 0xEC: return VCMD.tremoloOff;
+				case 0xED: return VCMD.volume;
+				case 0xEE: return VCMD.volumeFade;
+				case 0xEF: return VCMD.subRoutine;
+				case 0xF0: return VCMD.vibratoFadeIn;
+				case 0xF1: return VCMD.notePitchEnvelopeTo;
+				case 0xF2: return VCMD.notePitchEnvelopeFrom;
+				case 0xF3: return VCMD.notePitchEnvelopeOff;
+				case 0xF4: return VCMD.fineTune;
+				case 0xF5: return VCMD.echoEnableBitsAndVolume;
+				case 0xF6: return VCMD.echoOff;
+				case 0xF7: return VCMD.echoParameterSetup;
+				case 0xF8: return VCMD.echoVolumeFade;
+				case 0xF9: return VCMD.pitchSlideToNote;
+				case 0xFA: return VCMD.percussionBaseInstrumentRedefine;
+				case 0xFB: return VCMD.noop;
+				case 0xFC: return VCMD.channelMute;
+				case 0xFD: return VCMD.fastForwardOn;
+				case 0xFE: return VCMD.fastForwardOff;
+				case 0xFF: return VCMD.invalid;
+				default: break;
+			}
+		} else if (variant == Variant.prototype) {
+			switch (val) {
+				case 0xDA: return VCMD.instrument;
+				case 0xDB: return VCMD.panning;
+				case 0xDC: return VCMD.panningFade;
+				case 0xDD: return VCMD.pitchSlideToNote;
+				case 0xDE: return VCMD.vibratoOn;
+				case 0xDF: return VCMD.vibratoOff;
+				case 0xE0: return VCMD.songVolume;
+				case 0xE1: return VCMD.songVolumeFade;
+				case 0xE2: return VCMD.tempo;
+				case 0xE3: return VCMD.tempoFade;
+				case 0xE4: return VCMD.globalAbsoluteTransposition;
+				case 0xE5: return VCMD.tremoloOn;
+				case 0xE6: return VCMD.tremoloOff;
+				case 0xE7: return VCMD.volume;
+				case 0xE8: return VCMD.volumeFade;
+				case 0xE9: return VCMD.subRoutine;
+				case 0xEA: return VCMD.vibratoFadeIn;
+				case 0xEB: return VCMD.notePitchEnvelopeTo;
+				case 0xEC: return VCMD.notePitchEnvelopeFrom;
+				case 0xED: return VCMD.invalid;
+				case 0xEE: return VCMD.fineTune;
+				case 0xEF: return VCMD.echoEnableBitsAndVolume;
+				case 0xF0: return VCMD.echoOff;
+				case 0xF1: return VCMD.echoParameterSetup;
+				case 0xF2: return VCMD.echoVolumeFade;
+				case 0xF3: .. case 0xFF: return VCMD.invalid;
+				default: break;
+			}
 		}
 		assert(0, "Unknown command");
 	}
@@ -721,14 +802,16 @@ struct NSPCPlayer {
 	}
 
 	// $0654 + $08D4-$8EF
-	private void doNote(ref SongState st, ref ChannelState c, int note) nothrow @safe {
-		// using >=CA as a note switches to that instrument and plays note A4
-		if (note >= 0xCA) {
-			setInstrument(st, c, note);
-			note = 0xA4;
+	private void doNote(ref SongState st, ref ChannelState c, ubyte note) nothrow @safe {
+		const commandClass = getCommandClass(note);
+		// using >=CA as a note switches to that instrument and plays a predefined note
+		if (commandClass == VCMDClass.percussion) {
+			const ubyte inst = cast(ubyte)(percussionBase + st.firstCAInst + note - percussionID);
+			setInstrument(st, c, inst);
+			note = percussionNotes[note - percussionID];
 		}
 
-		if (note < 0xC8) {
+		if (commandClass.among(VCMDClass.percussion, VCMDClass.note)) {
 			c.vibratoPhase = c.vibratoFadeIn & 1 ? 0x80 : 0;
 			c.vibratoStartCtr = 0;
 			c.vibratoFadeInCtr = 0;
@@ -1061,7 +1144,10 @@ struct NSPCPlayer {
 		foreach (pack; packs) {
 			loadAllSubpacks(buffer[], pack);
 		}
-		processInstruments(buffer, instrumentBase, sampleBase);
+		NSPCFileHeader fakeHeader;
+		fakeHeader.instrumentBase = instrumentBase;
+		fakeHeader.sampleBase = sampleBase;
+		processInstruments(buffer, fakeHeader);
 	}
 	private void loadAllSubpacks(scope ubyte[] buffer, const(ubyte)[] pack) @safe {
 		ushort size, base;
@@ -1096,17 +1182,35 @@ struct NSPCPlayer {
 		assert(volumeTable < volumeTables.length, "Invalid volume table");
 		assert(releaseTable < releaseTables.length, "Invalid release table");
 		loadAllSubpacks(buffer[], data[NSPCFileHeader.sizeof .. $]);
-		processInstruments(buffer, header.instrumentBase, header.sampleBase);
+		processInstruments(buffer, header);
 		decompileSong(buffer[], currentSong, header.songBase, buffer.length - 1);
 	}
 
-	private void processInstruments(scope ubyte[] buffer, ushort instrumentBase, ushort sampleBase) @safe {
-		decodeSamples(buffer, cast(ushort[2][])(buffer[sampleBase .. sampleBase + maxSampleCount * 4]));
+	private void processInstruments(scope ubyte[] buffer, const NSPCFileHeader header) @safe {
+		decodeSamples(buffer, cast(ushort[2][])(buffer[header.sampleBase .. header.sampleBase + maxSampleCount * 4]));
 		instruments = [];
 		instruments.reserve(maxInstruments);
-		foreach (idx, instrument; cast(Instrument[])(buffer[instrumentBase .. instrumentBase + maxInstruments * Instrument.sizeof])) {
-			instruments ~= instrument;
-			debug(nspclogging) tracef("%s. %s", idx, instrument);
+		if (variant == Variant.prototype) {
+			size_t instrumentCount = maxInstruments;
+			if (header.instrumentBase < header.extra.percussionBase) {
+				instrumentCount = min(instrumentCount, (header.extra.percussionBase - header.instrumentBase) / PrototypeInstrument.sizeof);
+			}
+			foreach (idx, instrument; cast(PrototypeInstrument[])(buffer[header.instrumentBase .. header.instrumentBase + instrumentCount * PrototypeInstrument.sizeof])) {
+				instruments ~= cast(Instrument)instrument;
+				debug(nspclogging) tracef("%s. %s", idx, instrument);
+			}
+			percussionBase = instrumentCount;
+			foreach (idx, percussion; cast(PrototypePercussion[])(buffer[header.extra.percussionBase .. header.extra.percussionBase + maxInstruments * PrototypePercussion.sizeof])) {
+				instruments ~= cast(Instrument)percussion;
+				percussionNotes[idx] = percussion.note;
+				debug(nspclogging) tracef("%s. %s", idx, percussion);
+			}
+		} else {
+			foreach (idx, instrument; cast(Instrument[])(buffer[header.instrumentBase .. header.instrumentBase + maxInstruments * Instrument.sizeof])) {
+				instruments ~= instrument;
+				debug(nspclogging) tracef("%s. %s", idx, instrument);
+			}
+			percussionNotes = 0xA4;
 		}
 	}
 
@@ -1336,7 +1440,7 @@ struct NSPCPlayer {
 	}
 
 	private void validateTrack(ubyte[] data, bool isSub) @safe {
-		ubyte percussionBase;
+		ubyte tmpPercussionBase;
 		for (int pos = 0; pos < data.length;) {
 			ubyte byte_ = data[pos];
 			int next = pos + 1;
@@ -1350,7 +1454,7 @@ struct NSPCPlayer {
 					enforce!NSPCException(next != data.length, "Track can not end with note-length code");
 					break;
 				case VCMDClass.percussion:
-					validateInstrument(byte_ - 0xCA, 0);
+					validateInstrument(byte_ - percussionID, tmpPercussionBase, true);
 					break;
 				case VCMDClass.special:
 					const command = getCommand(cast(ubyte)byte_);
@@ -1359,7 +1463,7 @@ struct NSPCPlayer {
 					enforce!NSPCException(next <= data.length, format!"Incomplete %s code: [%(%02X %)]"(command, data[pos .. pos + data.length]));
 
 					if (command == VCMD.instrument) {
-						validateInstrument(data[pos + 1], percussionBase);
+						validateInstrument(data[pos + 1], 0, false);
 					}
 					if (command == VCMD.subRoutine) {
 						enforce!NSPCException(!isSub, "Can't call sub from within a sub");
@@ -1368,7 +1472,7 @@ struct NSPCPlayer {
 						enforce!NSPCException(data[pos + 3] != 0, "Subroutine loop count can not be 0");
 					}
 					if (command == VCMD.percussionBaseInstrumentRedefine) {
-						percussionBase = data[pos + 1];
+						tmpPercussionBase = data[pos + 1];
 					}
 					break;
 				case VCMDClass.note: // nothing to validate here
@@ -1402,11 +1506,11 @@ struct NSPCPlayer {
 		enforce!NSPCException(currentSong.order.length > 0, "No phrases loaded");
 		enforce!NSPCException(currentSong.order[$ - 1].type == PhraseType.end, "Phrase list must have an end phrase");
 	}
-	private void validateInstrument(size_t id, size_t base) const @safe {
-		if (id >= 0x80) {
-			id += base - 0xCA;
+	private void validateInstrument(size_t id, size_t base, bool percussion) const @safe {
+		if (percussion) {
+			id += base + percussionBase;
 		}
-		enforce!NSPCException(id <instruments.length, format!"instrument %s out of bounds!"(id));
+		enforce!NSPCException(id < instruments.length, format!"instrument %s out of bounds!"(id));
 		const idata = instruments[id];
 		enforce!NSPCException(samp[idata.sampleID].data, format!"no data for instrument %s"(id));
 		enforce!NSPCException((idata.tuning != 0) || (idata.tuningFraction != 0), format!"bad instrument %s"(id));
