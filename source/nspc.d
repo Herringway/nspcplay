@@ -761,20 +761,20 @@ struct NSPCPlayer {
 		// Search forward for the next note (to see if it's C8). This is annoying
 		// but necessary - C8 can continue the last note of a subroutine as well
 		// as a normal note.
-		int nextNote;
+		VCMDClass nextNote;
 		{
 			Parser p;
 			parserInit(p, c);
 			do {
-				if (p.ptr[0] >= 0x80 && p.ptr[0] < 0xE0) {
+				if (getCommandClass(p.ptr[0]).among(VCMDClass.note, VCMDClass.tie, VCMDClass.rest, VCMDClass.percussion)) {
 					break;
 				}
 			} while (parserAdvance(p));
-			nextNote = p.ptr[0];
+			nextNote = getCommandClass(p.ptr[0]);
 		}
 
 		int rel;
-		if (nextNote == 0xC8) {
+		if (nextNote == VCMDClass.tie) {
 			// if the note will be continued, don't release yet
 			rel = c.noteLen;
 		} else {
