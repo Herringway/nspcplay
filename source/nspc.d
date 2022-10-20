@@ -603,10 +603,9 @@ struct NSPCPlayer {
 			case 0xFE: return VCMD.fastForwardOff;
 			case 0xFF: return VCMD.invalid;
 			default:
-				assumeWontThrow(errorf("Unknown command: %02X", val));
 				break;
 		}
-		return VCMD.invalid;
+		assert(0, "Unknown command");
 	}
 
 	// do a Ex/Fx code
