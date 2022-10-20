@@ -270,12 +270,80 @@ enum PhraseType {
 	fastForwardOff,
 }
 
+enum ADSRGainMode {
+	adsr,
+	linearDecreaseGain,
+	expDecreaseGain,
+	linearIncreaseGain,
+	bentIncreaseGain,
+	directGain,
+}
+
 align(1) private struct ADSRGain {
 	align(1):
 	ushort adsr;
 	ubyte gain;
-	ubyte sustainRate() const @safe pure nothrow {
+	void toString(S)(ref S sink) {
+		import std.format: formattedWrite;
+		try {
+			sink.formattedWrite!"%s"(mode);
+			final switch (mode) {
+				case ADSRGainMode.adsr:
+					sink.formattedWrite!" (%s, %s, %s, %s)"(attackRate, decayRate, sustainRate, sustainLevel);
+					break;
+				case ADSRGainMode.linearDecreaseGain:
+				case ADSRGainMode.expDecreaseGain:
+				case ADSRGainMode.linearIncreaseGain:
+				case ADSRGainMode.bentIncreaseGain:
+					sink.formattedWrite!" (%s)"(gainRate);
+					break;
+				case ADSRGainMode.directGain:
+					sink.formattedWrite!" (%s)"(fixedVolume);
+					break;
+			}
+		} catch (Exception) {}
+	}
+	const @safe pure nothrow:
+	ubyte attackRate() {
+		return adsr & 0x0F;
+	}
+	ubyte decayRate() {
+		return (adsr & 0x70) >> 4;
+	}
+	bool adsrGainSelect() {
+		return !!(adsr & 0x10);
+	}
+	ubyte sustainRate() {
 		return (adsr & 0x1F00) >> 8;
+	}
+	ubyte sustainLevel() {
+		return (adsr & 0xE000) >> 13;
+	}
+	ADSRGainMode mode() {
+		if (adsrGainSelect) {
+			return ADSRGainMode.adsr;
+		} else {
+			if (!!(gain & 0x80)) {
+				switch ((gain & 0x7F) >> 5) {
+					case 0:
+						return ADSRGainMode.linearDecreaseGain;
+					case 1:
+						return ADSRGainMode.expDecreaseGain;
+					case 2:
+						return ADSRGainMode.linearIncreaseGain;
+					case 3:
+						return ADSRGainMode.bentIncreaseGain;
+					default: assert(0);
+				}
+			}
+			return ADSRGainMode.directGain;
+		}
+	}
+	ubyte gainRate() {
+		return gain & 0xF;
+	}
+	ubyte fixedVolume() {
+		return gain & 0x3F;
 	}
 }
 
