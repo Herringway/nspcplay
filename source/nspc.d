@@ -403,10 +403,11 @@ struct NSPCPlayer {
 
 	private inout(ubyte)[] nextCode(return scope inout(ubyte)[] p) nothrow @safe {
 		ubyte chr = p[0];
+		const commandClass = getCommandClass(chr);
 		p = p[1 .. $];
-		if (chr < 0x80) {
+		if (commandClass == VCMDClass.noteDuration) {
 			p = p[p[0] < 0x80 .. $];
-		} else if (chr >= 0xE0) {
+		} else if (commandClass == VCMDClass.special) {
 			const command = getCommand(chr);
 			p = p[codeLength[command] .. $];
 		}
@@ -414,19 +415,20 @@ struct NSPCPlayer {
 	}
 
 	private bool parserAdvance(ref Parser p) nothrow @safe {
-		int chr = p.ptr[0];
-		if (chr == 0) {
+		ubyte chr = p.ptr[0];
+		const commandClass = getCommandClass(p.ptr[0]);
+		if (commandClass == VCMDClass.terminator) {
 			if (p.subCount == 0) {
 				return false;
 			}
 			p.ptr = --p.subCount ? currentSong.sub[p.subStart].track : p.subRet;
-		} else if (chr == 0xEF) {
+		} else if ((commandClass == VCMDClass.special) && (getCommand(p.ptr[0]) == VCMD.subRoutine)) {
 			p.subRet = p.ptr[4 .. $];
 			p.subStart = (cast(ushort[])p.ptr[1 .. 3])[0];
 			p.subCount = p.ptr[3];
 			p.ptr = currentSong.sub[p.subStart].track;
 		} else {
-			if (chr < 0x80) {
+			if (commandClass == VCMDClass.noteDuration) {
 				p.noteLen = cast(ubyte) chr;
 			}
 			p.ptr = nextCode(p.ptr);
@@ -1337,35 +1339,43 @@ struct NSPCPlayer {
 	private void validateTrack(ubyte[] data, bool isSub) @safe {
 		ubyte percussionBase;
 		for (int pos = 0; pos < data.length;) {
-			int byte_ = data[pos];
+			ubyte byte_ = data[pos];
 			int next = pos + 1;
+			final switch (getCommandClass(byte_)) {
+				case VCMDClass.terminator:
+					throw new NSPCException("Track can not contain [00]");
+				case VCMDClass.noteDuration:
+					if (next != data.length && data[next] < 0x80) {
+						next++;
+					}
+					enforce!NSPCException(next != data.length, "Track can not end with note-length code");
+					break;
+				case VCMDClass.percussion:
+					validateInstrument(byte_ - 0xCA, 0);
+					break;
+				case VCMDClass.special:
+					const command = getCommand(cast(ubyte)byte_);
+					enforce!NSPCException(command != VCMD.invalid, format!"Invalid code [%02X]"(byte_));
+					next += codeLength[command];
+					enforce!NSPCException(next <= data.length, format!"Incomplete %s code: [%(%02X %)]"(command, data[pos .. pos + data.length]));
 
-			if (byte_ < 0x80) {
-				enforce!NSPCException(byte_ != 0, "Track can not contain [00]");
-				if (next != data.length && data[next] < 0x80) {
-					next++;
-				}
-				enforce!NSPCException(next != data.length, "Track can not end with note-length code");
-			} else if ((byte_ >= 0xCA) && (byte_ < 0xE0)) {
-				validateInstrument(byte_ - 0xCA, 0);
-			} else if (byte_ >= 0xE0) {
-				const command = getCommand(cast(ubyte)byte_);
-				enforce!NSPCException(command != VCMD.invalid, format!"Invalid code [%02X]"(byte_));
-				next += codeLength[command];
-				enforce!NSPCException(next <= data.length, format!"Incomplete code: [%(%02X %)]"(data[pos .. pos + data.length]));
-
-				if (byte_ == 0xE0) {
-					validateInstrument(data[pos + 1], percussionBase);
-				}
-				if (byte_ == 0xEF) {
-					enforce!NSPCException(!isSub, "Can't call sub from within a sub");
-					int sub = (cast(ushort[]) data[pos + 1 .. pos + 3])[0];
-					enforce!NSPCException(sub < currentSong.sub.length, format!"Subroutine %d not present"(sub));
-					enforce!NSPCException(data[pos + 3] != 0, "Subroutine loop count can not be 0");
-				}
-				if (byte_ == 0xFA) {
-					percussionBase = data[pos + 1];
-				}
+					if (command == VCMD.instrument) {
+						validateInstrument(data[pos + 1], percussionBase);
+					}
+					if (command == VCMD.subRoutine) {
+						enforce!NSPCException(!isSub, "Can't call sub from within a sub");
+						int sub = (cast(ushort[]) data[pos + 1 .. pos + 3])[0];
+						enforce!NSPCException(sub < currentSong.sub.length, format!"Subroutine %d not present"(sub));
+						enforce!NSPCException(data[pos + 3] != 0, "Subroutine loop count can not be 0");
+					}
+					if (command == VCMD.percussionBaseInstrumentRedefine) {
+						percussionBase = data[pos + 1];
+					}
+					break;
+				case VCMDClass.note: // nothing to validate here
+				case VCMDClass.tie:
+				case VCMDClass.rest:
+					break;
 			}
 
 			pos = next;
