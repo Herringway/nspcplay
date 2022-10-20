@@ -237,11 +237,15 @@ private struct Phrase {
 	}
 }
 
+enum Variant : uint {
+	standard = 0,
+}
+
 ///
 struct NSPCFileHeader {
 	align(1):
 	/// Which version of NSPC to use
-	uint variant;
+	Variant variant;
 	/// Base SPC address of the song's sequence data
 	ushort songBase;
 	/// Base SPC address of the instruments
@@ -277,6 +281,7 @@ struct NSPCPlayer {
 	private enum maxSampleCount = 128;
 	private size_t volumeTable;
 	private size_t releaseTable;
+	private Variant variant;
 	///
 	short[2][] fillBuffer(short[2][] buffer) nothrow @safe {
 		if (!songPlaying) {
@@ -1013,7 +1018,8 @@ struct NSPCPlayer {
 		}
 		ubyte[65536] buffer;
 		auto header = (cast(const(NSPCFileHeader)[])(data[0 .. NSPCFileHeader.sizeof]))[0];
-		debug(nspclogging) tracef("Loading NSPC - so: %X, i: %X, sa: %X", header.songBase, header.instrumentBase, header.sampleBase);
+		debug(nspclogging) tracef("Loading NSPC - so: %X, i: %X, sa: %X, variant: %s", header.songBase, header.instrumentBase, header.sampleBase, header.variant);
+		variant = header.variant;
 		volumeTable = header.volumeTable;
 		releaseTable = header.releaseTable;
 		debug(nspclogging) tracef("Release table: %s, volume table: %s", header.releaseTable, header.volumeTable);
