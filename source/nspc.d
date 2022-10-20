@@ -502,6 +502,9 @@ struct NSPCPlayer {
 	}
 
 	private void setInstrument(ref SongState st, ref ChannelState c, uint inst) nothrow @safe {
+		if (inst > 0x80) {
+			inst += st.firstCAInst + percussionBase - percussionID;
+		}
 		if (inst >= instruments.length) {
 			assert(0, format!"instrument %s out of bounds!"(inst));
 		}
@@ -1507,6 +1510,10 @@ struct NSPCPlayer {
 		enforce!NSPCException(currentSong.order[$ - 1].type == PhraseType.end, "Phrase list must have an end phrase");
 	}
 	private void validateInstrument(size_t id, size_t base, bool percussion) const @safe {
+		if (id > 0x80) {
+			percussion = true;
+			id -= percussionID;
+		}
 		if (percussion) {
 			id += base + percussionBase;
 		}
