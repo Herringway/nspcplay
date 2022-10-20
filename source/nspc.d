@@ -914,7 +914,7 @@ struct NSPCPlayer {
 				}
 			}
 			// $0B84
-			if ((c.note.cycles == 0) && (getCommandClass(c.ptr[0] == VCMDClass.special)) && (getCommand(c.ptr[0]) == VCMD.pitchSlideToNote)) {
+			if ((c.note.cycles == 0) && (getCommandClass(c.ptr[0]) == VCMDClass.special) && (getCommand(c.ptr[0]) == VCMD.pitchSlideToNote)) {
 				doCommand(st, c);
 			}
 		}
