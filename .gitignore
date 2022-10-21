@@ -20,3 +20,7 @@ dub.selections.json
 *.nspc
 *.ebm
 songs
+*.wav
+*.flac
+*.exp
+*.lib
