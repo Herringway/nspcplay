@@ -6,5 +6,19 @@
 		"player",
 		"extract",
 		"mknspc"
+	],
+	"configurations": [
+		{
+			"name": "default"
+		},
+		{
+			"name": "static",
+			"dflags-windows-ldc": ["-static"]
+		},
+		{
+			"name": "shared",
+			"targetType": "dynamicLibrary",
+			"dflags-windows": ["-static"]
+		}
 	]
 }
