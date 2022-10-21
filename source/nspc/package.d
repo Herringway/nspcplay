@@ -283,7 +283,7 @@ private struct PrototypeInstrument {
 	ubyte sampleID;
 	ADSRGain adsrGain;
 	ubyte tuning;
-	Instrument opCast(T: Instrument)() {
+	Instrument opCast(T: Instrument)() const {
 		return Instrument(sampleID, adsrGain, tuning, 0);
 	}
 }
@@ -293,7 +293,7 @@ private struct PrototypePercussion {
 	ADSRGain adsrGain;
 	ubyte tuning;
 	ubyte note;
-	Instrument opCast(T: Instrument)() {
+	Instrument opCast(T: Instrument)() const {
 		return Instrument(sampleID, adsrGain, tuning, 0);
 	}
 }
@@ -1269,11 +1269,11 @@ struct NSPCPlayer {
 	}
 
 	/// Start playing music
-	void play() @safe {
+	void play() @safe nothrow {
 		initialize(mixrate);
 		songPlaying = true;
 	}
-	void stop() @safe {
+	void stop() @safe nothrow {
 		songPlaying = false;
 	}
 	/// Load a single sequence pack at a given address
@@ -1294,8 +1294,15 @@ struct NSPCPlayer {
 	void loadInstruments(const(ubyte)[][] packs, ushort instrumentBase, ushort sampleBase) @safe {
 		ubyte[65536] buffer;
 		foreach (pack; packs) {
-			loadAllSubpacks(buffer[], pack);
+			loadInstrumentPack(buffer, pack);
 		}
+		initializeInstruments(buffer, instrumentBase, sampleBase);
+	}
+	/// Load instruments from provided packs at the given addresses
+	void loadInstrumentPack(scope ref ubyte[65536] buffer, const(ubyte)[] pack) @safe {
+		loadAllSubpacks(buffer[], pack);
+	}
+	void initializeInstruments(scope const ref ubyte[65536] buffer, ushort instrumentBase, ushort sampleBase) @safe {
 		NSPCFileHeader fakeHeader;
 		fakeHeader.instrumentBase = instrumentBase;
 		fakeHeader.sampleBase = sampleBase;
@@ -1338,8 +1345,8 @@ struct NSPCPlayer {
 		decompileSong(buffer[], currentSong, header.songBase, buffer.length - 1);
 	}
 
-	private void processInstruments(scope ubyte[] buffer, const NSPCFileHeader header) @safe {
-		decodeSamples(buffer, cast(ushort[2][])(buffer[header.sampleBase .. header.sampleBase + maxSampleCount * 4]));
+	private void processInstruments(scope const ubyte[] buffer, const NSPCFileHeader header) @safe {
+		decodeSamples(buffer, cast(const(ushort[2])[])(buffer[header.sampleBase .. header.sampleBase + maxSampleCount * 4]));
 		instruments = [];
 		instruments.reserve(maxInstruments);
 		if (variant == Variant.prototype) {
@@ -1347,18 +1354,18 @@ struct NSPCPlayer {
 			if (header.instrumentBase < header.extra.percussionBase) {
 				instrumentCount = min(instrumentCount, (header.extra.percussionBase - header.instrumentBase) / PrototypeInstrument.sizeof);
 			}
-			foreach (idx, instrument; cast(PrototypeInstrument[])(buffer[header.instrumentBase .. header.instrumentBase + instrumentCount * PrototypeInstrument.sizeof])) {
+			foreach (idx, instrument; cast(const(PrototypeInstrument)[])(buffer[header.instrumentBase .. header.instrumentBase + instrumentCount * PrototypeInstrument.sizeof])) {
 				instruments ~= cast(Instrument)instrument;
 				debug(nspclogging) tracef("%s. %s", idx, instrument);
 			}
 			percussionBase = instrumentCount;
-			foreach (idx, percussion; cast(PrototypePercussion[])(buffer[header.extra.percussionBase .. header.extra.percussionBase + maxInstruments * PrototypePercussion.sizeof])) {
+			foreach (idx, percussion; cast(const(PrototypePercussion)[])(buffer[header.extra.percussionBase .. header.extra.percussionBase + maxInstruments * PrototypePercussion.sizeof])) {
 				instruments ~= cast(Instrument)percussion;
 				percussionNotes[idx] = percussion.note;
 				debug(nspclogging) tracef("%s. %s", idx, percussion);
 			}
 		} else {
-			foreach (idx, instrument; cast(Instrument[])(buffer[header.instrumentBase .. header.instrumentBase + maxInstruments * Instrument.sizeof])) {
+			foreach (idx, instrument; cast(const(Instrument)[])(buffer[header.instrumentBase .. header.instrumentBase + maxInstruments * Instrument.sizeof])) {
 				instruments ~= instrument;
 				debug(nspclogging) tracef("%s. %s", idx, instrument);
 			}
@@ -1520,7 +1527,7 @@ struct NSPCPlayer {
 		}
 	}
 
-	private void decodeSamples(scope ubyte[] buffer, const scope ushort[2][] ptrtable) nothrow @safe {
+	private void decodeSamples(scope const ubyte[] buffer, const scope ushort[2][] ptrtable) nothrow @safe {
 		for (uint sn = 0; sn < 128; sn++) {
 			const start = ptrtable[sn][0];
 			const loop = ptrtable[sn][1];
@@ -1672,15 +1679,15 @@ struct NSPCPlayer {
 		enforce!NSPCException((idata.tuning != 0) || (idata.tuningFraction != 0), format!"bad instrument %s"(id));
 	}
 	/// Sets the playback speed. Default value is NSPCPlayer.defaultSpeed.
-	public void setSpeed(ushort rate) @safe {
+	public void setSpeed(ushort rate) @safe nothrow {
 		timerSpeed = rate;
 	}
 	/// Enable or disable song looping
-	public void looping(bool enabled) @safe {
+	public void looping(bool enabled) @safe nothrow {
 		loopEnabled = enabled;
 	}
 	/// Enable or disable a song channel
-	public void setChannelEnabled(ubyte channel, bool enabled) @safe {
+	public void setChannelEnabled(ubyte channel, bool enabled) @safe nothrow {
 		const newChmask = 1 << channel;
 		if (enabled) {
 			chmask |= newChmask;
@@ -1688,7 +1695,7 @@ struct NSPCPlayer {
 			chmask &= ~newChmask;
 		}
 	}
-	bool isPlaying() const pure @safe {
+	bool isPlaying() const pure @safe nothrow {
 		return songPlaying;
 	}
 }
