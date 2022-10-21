@@ -39,6 +39,14 @@ private struct Slider {
 	}
 }
 
+enum ADSRPhase {
+	attack,
+	decay,
+	sustain,
+	gain,
+	release
+}
+
 private struct ChannelState {
 	ubyte[] ptr;
 
@@ -90,8 +98,34 @@ private struct ChannelState {
 	int sampPos = -1;
 	int noteFrequency;
 
-	double envelopeHeight = 0.0;
-	double decayRate = 0.0;
+	short gain;
+	ADSRPhase adsrPhase;
+	ushort adsrCounter;
+	ubyte adsrRate;
+	void setADSRPhase(ADSRPhase phase) @safe pure nothrow {
+		adsrCounter = 0;
+		adsrPhase = phase;
+		final switch (phase) {
+			case ADSRPhase.attack:
+				adsrRate = cast(ubyte)(instADSRGain.attackRate * 2 + 1);
+				break;
+			case ADSRPhase.decay:
+				adsrRate = cast(ubyte)(instADSRGain.decayRate * 2 + 16);
+				break;
+			case ADSRPhase.sustain:
+				adsrRate = instADSRGain.sustainRate;
+				break;
+			case ADSRPhase.gain:
+				if (instADSRGain.mode == ADSRGainMode.customGain) {
+					adsrRate = instADSRGain.gainRate;
+				}
+				assert(instADSRGain.mode != ADSRGainMode.adsr);
+				break;
+			case ADSRPhase.release:
+				adsrRate = 31;
+				break;
+		}
+	}
 }
 
 private struct Sample {
@@ -119,6 +153,9 @@ private struct Track {
 	int size;
 	ubyte[] track; // null for inactive track
 }
+
+// Rates (in samples) until next step is applied
+private immutable adsrGainRates = [ 0, 2048, 1536, 1280, 1024, 768, 640, 512, 384, 320, 256, 192, 160, 128, 96, 80, 64, 48, 40, 32, 24, 20, 16, 12, 10, 8, 6, 5, 4, 3, 2, 1 ];
 
 // note style tables, from 6F80
 private immutable ubyte[8][] releaseTables = [
@@ -270,12 +307,15 @@ enum PhraseType {
 	fastForwardOff,
 }
 
-enum ADSRGainMode {
-	adsr,
+enum GainMode {
 	linearDecreaseGain,
 	expDecreaseGain,
 	linearIncreaseGain,
 	bentIncreaseGain,
+}
+enum ADSRGainMode {
+	adsr,
+	customGain,
 	directGain,
 }
 
@@ -283,7 +323,7 @@ align(1) private struct ADSRGain {
 	align(1):
 	ushort adsr;
 	ubyte gain;
-	void toString(S)(ref S sink) {
+	void toString(S)(ref S sink) const {
 		import std.format: formattedWrite;
 		try {
 			sink.formattedWrite!"%s"(mode);
@@ -291,11 +331,8 @@ align(1) private struct ADSRGain {
 				case ADSRGainMode.adsr:
 					sink.formattedWrite!" (%s, %s, %s, %s)"(attackRate, decayRate, sustainRate, sustainLevel);
 					break;
-				case ADSRGainMode.linearDecreaseGain:
-				case ADSRGainMode.expDecreaseGain:
-				case ADSRGainMode.linearIncreaseGain:
-				case ADSRGainMode.bentIncreaseGain:
-					sink.formattedWrite!" (%s)"(gainRate);
+				case ADSRGainMode.customGain:
+					sink.formattedWrite!" (%s, %s)"(gainMode, gainRate);
 					break;
 				case ADSRGainMode.directGain:
 					sink.formattedWrite!" (%s)"(fixedVolume);
@@ -311,32 +348,35 @@ align(1) private struct ADSRGain {
 		return (adsr & 0x70) >> 4;
 	}
 	bool adsrGainSelect() {
-		return !!(adsr & 0x10);
+		return !!(adsr & 0x80);
 	}
 	ubyte sustainRate() {
 		return (adsr & 0x1F00) >> 8;
 	}
-	ubyte sustainLevel() {
-		return (adsr & 0xE000) >> 13;
+	short sustainLevel() {
+		return (((adsr & 0xE000) >> 13) + 1) << 8;
 	}
 	ADSRGainMode mode() {
 		if (adsrGainSelect) {
 			return ADSRGainMode.adsr;
 		} else {
 			if (!!(gain & 0x80)) {
-				switch ((gain & 0x7F) >> 5) {
-					case 0:
-						return ADSRGainMode.linearDecreaseGain;
-					case 1:
-						return ADSRGainMode.expDecreaseGain;
-					case 2:
-						return ADSRGainMode.linearIncreaseGain;
-					case 3:
-						return ADSRGainMode.bentIncreaseGain;
-					default: assert(0);
-				}
+				return ADSRGainMode.customGain;
 			}
 			return ADSRGainMode.directGain;
+		}
+	}
+	GainMode gainMode() {
+		switch ((gain & 0x7F) >> 5) {
+			case 0:
+				return GainMode.linearDecreaseGain;
+			case 1:
+				return GainMode.expDecreaseGain;
+			case 2:
+				return GainMode.linearIncreaseGain;
+			case 3:
+				return GainMode.bentIncreaseGain;
+			default: assert(0);
 		}
 	}
 	ubyte gainRate() {
@@ -405,6 +445,52 @@ struct NSPCFileHeader {
 	Extra extra;
 }
 
+void doADSR(ref ChannelState chan) nothrow @safe {
+	ushort level() {
+		return cast(ushort)(((chan.gain - 1) >> 8) + 1);
+	}
+	final switch (chan.adsrPhase) {
+		case ADSRPhase.attack:
+			chan.gain += (chan.adsrRate == 31) ? 1024 : 32;
+			if (chan.gain > 0x7E0) {
+				chan.setADSRPhase(ADSRPhase.decay);
+			}
+			break;
+		case ADSRPhase.decay:
+			chan.gain -= level;
+			if (chan.gain < chan.instADSRGain.sustainLevel) {
+				chan.setADSRPhase(ADSRPhase.sustain);
+			}
+			break;
+		case ADSRPhase.sustain:
+			chan.gain -= level;
+			break;
+		case ADSRPhase.gain:
+			final switch(chan.instADSRGain.gainMode) {
+				case GainMode.linearDecreaseGain:
+					chan.gain -= 32;
+					break;
+				case GainMode.expDecreaseGain:
+					chan.gain -= level;
+					break;
+				case GainMode.linearIncreaseGain:
+					chan.gain += 32;
+					break;
+				case GainMode.bentIncreaseGain:
+					chan.gain +=  (chan.gain < 0x600) ? 32 : 8;
+					break;
+			}
+			break;
+		case ADSRPhase.release:
+			chan.gain -= 8;
+			if (chan.gain < 0) {
+				chan.sampPos = -1;
+			}
+			break;
+	}
+	chan.gain = clamp(chan.gain, cast(short)0, cast(short)0x7FF);
+}
+
 ///
 struct NSPCPlayer {
 	enum defaultSpeed = 500;
@@ -459,26 +545,21 @@ struct NSPCPlayer {
 					assert(0, format!"Sample position exceeds sample length! %d > %d"(ipos, chan.samp.data.length));
 				}
 
-				if (chan.noteRelease != 0) {
-					if (chan.instADSRGain.sustainRate) {
-						chan.envelopeHeight *= chan.decayRate;
-					}
-				} else {
-					// release takes about 15ms (not dependent on tempo)
-					chan.envelopeHeight -= (32000 / 512.0) / mixrate;
-					if (chan.envelopeHeight < 0) {
-						chan.sampPos = -1;
-						continue;
-					}
+				if (chan.adsrRate && (++chan.adsrCounter >= adsrGainRates[chan.adsrRate])) {
+					doADSR(chan);
+					chan.adsrCounter = 0;
 				}
-				double volume = chan.envelopeHeight / 128.0;
+				if (chan.gain == 0) {
+					continue;
+				}
 				assert(chan.samp.data);
 				int s1 = chan.samp.data[ipos];
 				int s2 = (ipos + 1 == chan.samp.data.length) ? s1 : chan.samp.data[ipos + 1];
 				s1 += (s2 - s1) * (chan.sampPos & 0x7FFF) >> 15;
+				s1 = (s1 * chan.gain) >> 11;
 
-				left += cast(int)(s1 * chan.leftVol * volume);
-				right += cast(int)(s1 * chan.rightVol * volume);
+				left += cast(int)(s1 * chan.leftVol / 128.0);
+				right += cast(int)(s1 * chan.rightVol / 128.0);
 
 				chan.sampPos += chan.noteFrequency;
 				if ((chan.sampPos >> 15) >= chan.samp.data.length) {
@@ -486,6 +567,7 @@ struct NSPCPlayer {
 						chan.sampPos -= chan.samp.loopLength << 15;
 					} else {
 						chan.sampPos = -1;
+						chan.adsrPhase = ADSRPhase.release;
 					}
 				}
 			}
@@ -589,16 +671,8 @@ struct NSPCPlayer {
 
 		c.inst = cast(ubyte) inst;
 		c.instADSRGain = idata.adsrGain;
-		if (c.instADSRGain.sustainRate) {
-			int i = c.instADSRGain.sustainRate;
-			// calculate the constant to multiply envelope height by on each sample
-			int halflife;
-			if (i >= 30) {
-				halflife = 32 - i;
-			} else {
-				halflife = ((512 >> (i / 3)) * (5 - i % 3));
-			}
-			c.decayRate = pow(2.0, -1.0 / (0.0055 * halflife * mixrate));
+		if (idata.adsrGain.mode == ADSRGainMode.directGain) {
+			c.gain = idata.adsrGain.fixedVolume;
 		}
 	}
 
@@ -894,7 +968,8 @@ struct NSPCPlayer {
 
 			c.sampPos = 0;
 			c.samp = samp[instruments[c.inst].sampleID];
-			c.envelopeHeight = 1;
+			c.gain = 0;
+			c.setADSRPhase((instruments[c.inst].adsrGain.mode == ADSRGainMode.adsr) ? ADSRPhase.attack : ADSRPhase.gain);
 
 			note &= 0x7F;
 			note += st.transpose + c.transpose;
@@ -994,6 +1069,9 @@ struct NSPCPlayer {
 	private void CF7(ref ChannelState c) nothrow @safe {
 		if (c.noteRelease) {
 			c.noteRelease--;
+		}
+		if (!c.noteRelease) {
+			c.setADSRPhase(ADSRPhase.release);
 		}
 
 		// 0D60
