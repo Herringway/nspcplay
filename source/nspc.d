@@ -545,7 +545,7 @@ struct NSPCPlayer {
 					assert(0, format!"Sample position exceeds sample length! %d > %d"(ipos, chan.samp.data.length));
 				}
 
-				if (chan.adsrRate && (++chan.adsrCounter >= adsrGainRates[chan.adsrRate])) {
+				if (chan.adsrRate && (++chan.adsrCounter >= cast(int)(adsrGainRates[chan.adsrRate] * (mixrate / 44100.0)))) {
 					doADSR(chan);
 					chan.adsrCounter = 0;
 				}
