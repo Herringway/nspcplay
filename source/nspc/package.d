@@ -1616,10 +1616,10 @@ struct NSPCPlayer {
 		if (percussion) {
 			id += base + percussionBase;
 		}
-		enforce!NSPCException(id < instruments.length, format!"instrument %s out of bounds!"(id));
+		enforce!NSPCException(id < instruments.length, format!"Invalid instrument %s - Index out of bounds"(id));
 		const idata = instruments[id];
-		enforce!NSPCException(samp[idata.sampleID].data, format!"no data for instrument %s"(id));
-		enforce!NSPCException((idata.tuning != 0) || (idata.tuningFraction != 0), format!"bad instrument %s"(id));
+		enforce!NSPCException(samp[idata.sampleID].isValid, format!"Invalid instrument %s - Invalid sample %s"(id, idata.sampleID));
+		enforce!NSPCException((idata.tuning != 0) || (idata.tuningFraction != 0), format!"Invalid instrument %s - bad tuning"(id));
 	}
 	/// Sets the playback speed. Default value is NSPCPlayer.defaultSpeed.
 	public void setSpeed(ushort rate) @safe nothrow {
