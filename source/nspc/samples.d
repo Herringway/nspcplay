@@ -7,6 +7,9 @@ private enum brrFlagLoop = 2;
 struct Sample {
 	short[] data;
 	int loopLength;
+	bool isValid() const @safe pure nothrow {
+		return data.length > 0;
+	}
 }
 
 Sample decodeSample(scope const ubyte[] buffer, ushort start, ushort loop) @safe {

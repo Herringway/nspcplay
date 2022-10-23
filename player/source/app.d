@@ -54,12 +54,14 @@ int main(string[] args) {
 	int sampleRate = 44100;
 	ushort speed = NSPCPlayer.defaultSpeed;
 	string outfile;
+	bool dumpBRRFiles;
 	if (args.length < 2) {
 		return 1;
 	}
 
 	auto help = getopt(args,
 		"f|samplerate", "Sets sample rate (Hz)", &sampleRate,
+		"b|brrdump", "Dumps BRR samples used", &dumpBRRFiles,
 		"o|outfile", "Dumps output to file", &outfile,
 		"v|verbose", "Print more verbose information", &verbose,
 		"s|speed", "Sets playback speed (500 is default)", &speed);
@@ -90,6 +92,12 @@ int main(string[] args) {
 
 	if (outfile != "") {
 		dumpWav(nspc, sampleRate, channels, outfile);
+	} else if (dumpBRRFiles) {
+		foreach(idx, sample; nspc.getSamples) {
+			const filename = format!"%s.%s.brr.wav"(args[1], idx);
+			dumpWav(sample.data, sampleRate, 1, filename);
+			writeln("Writing ", filename);
+		}
 	} else {
 		// Prepare to play music
 		if (!initAudio(&_sampling_func, channels, sampleRate, &nspc)) {
@@ -136,9 +144,13 @@ void dumpWav(ref NSPCPlayer player, uint sampleRate, ushort channels, string fil
 		short[2][4096] buffer;
 		samples ~= player.fillBuffer(buffer[]);
 	}
+	dumpWav(samples, sampleRate, channels, filename);
+}
+
+void dumpWav(T)(T[] samples, uint sampleRate, ushort channels, string filename) {
 	auto file = File(filename, "w");
 	WAVFile header;
-	header.sampleRate = 44100;
+	header.sampleRate = sampleRate;
 	header.channels = channels;
 	header.bitsPerSample = 16;
 	header.recalcSizes(samples.length);

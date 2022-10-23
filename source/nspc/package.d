@@ -1635,6 +1635,11 @@ struct NSPCPlayer {
 	bool isPlaying() const pure @safe nothrow {
 		return songPlaying;
 	}
+	const(Sample)[] getSamples() const pure @safe nothrow {
+		import std.algorithm.iteration : filter;
+		import std.array : array;
+		return samp[].filter!(x => x.isValid).array;
+	}
 }
 
 private T read(T)(const(ubyte)[] data, size_t offset) {
