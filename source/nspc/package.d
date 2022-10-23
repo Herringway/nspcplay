@@ -269,6 +269,12 @@ private struct Instrument {
 	ADSRGain adsrGain;
 	ubyte tuning;
 	ubyte tuningFraction;
+	void toString(S)(ref S sink) const {
+		import std.format: formattedWrite;
+		try {
+			sink.formattedWrite!"Sample: %s, ADSR/gain: %s, tuning: %s"(sampleID, adsrGain, (tuning << 8) + tuningFraction);
+		} catch (Exception) {}
+	}
 }
 
 private struct PrototypeInstrument {
