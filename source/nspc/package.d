@@ -612,7 +612,7 @@ struct NSPCPlayer {
 			p.ptr = --p.subCount ? currentSong.sub[p.subStart].track : p.subRet;
 		} else if ((commandClass == VCMDClass.special) && (getCommand(p.ptr[0]) == VCMD.subRoutine)) {
 			p.subRet = p.ptr[4 .. $];
-			p.subStart = (cast(ushort[])p.ptr[1 .. 3])[0];
+			p.subStart = read!ushort(p.ptr, 1);
 			p.subCount = p.ptr[3];
 			p.ptr = currentSong.sub[p.subStart].track;
 		} else {
@@ -1284,7 +1284,7 @@ struct NSPCPlayer {
 	}
 	/// Load a single sequence pack, automatically detecting the address from the pack header
 	void loadSequencePack(const(ubyte)[] data) @safe {
-		ushort base = (cast(const(ushort)[])(data[2 .. 4]))[0];
+		ushort base = read!ushort(data, 2);
 		loadSequence(data, base);
 	}
 	private void loadSequence(const(ubyte)[] data, ushort base) @safe {
@@ -1316,11 +1316,11 @@ struct NSPCPlayer {
 			if (pack.length == 0) {
 				break;
 			}
-			size = (cast(const(ushort)[])(pack[0 .. 2]))[0];
+			size = read!ushort(pack);
 			if (size == 0) {
 				break;
 			}
-			base = (cast(const(ushort)[])(pack[2 .. 4]))[0];
+			base = read!ushort(pack, 2);
 			debug(nspclogging) tracef("Loading subpack to %X (%s bytes)", base, size);
 			enforce!NSPCException(base + size <= ushort.max, "Invalid pack - base + size exceeds 64KB memory limit");
 			buffer[base .. base + size] = pack[4 .. size + 4];
@@ -1334,7 +1334,7 @@ struct NSPCPlayer {
 			stop();
 		}
 		ubyte[65536] buffer;
-		auto header = (cast(const(NSPCFileHeader)[])(data[0 .. NSPCFileHeader.sizeof]))[0];
+		auto header = read!NSPCFileHeader(data);
 		debug(nspclogging) tracef("Loading NSPC - so: %X, i: %X, sa: %X, variant: %s", header.songBase, header.instrumentBase, header.sampleBase, header.variant);
 		variant = header.variant;
 		volumeTable = header.volumeTable;
@@ -1525,7 +1525,7 @@ struct NSPCPlayer {
 			if ((commandClass != VCMDClass.special) || (getCommand(p[0])  != VCMD.subRoutine)) {
 				continue;
 			}
-			int subPtr = (cast(const(ushort)[])(p[1 .. 3]))[0];
+			int subPtr = read!ushort(p, 1);
 			int subEntry;
 
 			// find existing entry in subTable
@@ -1598,7 +1598,7 @@ struct NSPCPlayer {
 					}
 					if (command == VCMD.subRoutine) {
 						enforce!NSPCException(!isSub, "Can't call sub from within a sub");
-						int sub = (cast(ushort[]) data[pos + 1 .. pos + 3])[0];
+						int sub = read!ushort(data, pos + 1);
 						enforce!NSPCException(sub < currentSong.sub.length, format!"Subroutine %d not present"(sub));
 						enforce!NSPCException(data[pos + 3] != 0, "Subroutine loop count can not be 0");
 					}
@@ -1678,7 +1678,7 @@ struct NSPCPlayer {
 	}
 }
 
-private T read(T)(const(ubyte)[] data, size_t offset) {
+private T read(T)(const(ubyte)[] data, size_t offset = 0) {
 	return (cast(const(T)[])(data[offset .. offset + T.sizeof]))[0];
 }
 
