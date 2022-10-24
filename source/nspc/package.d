@@ -269,12 +269,15 @@ private struct Instrument {
 	align(1):
 	ubyte sampleID;
 	ADSRGain adsrGain;
-	ubyte tuning;
-	ubyte tuningFraction;
+	private ubyte _tuning;
+	private ubyte _tuningFraction;
+	ushort tuning() const pure @safe nothrow {
+		return (_tuning << 8) + _tuningFraction;
+	}
 	void toString(S)(ref S sink) const {
 		import std.format: formattedWrite;
 		try {
-			sink.formattedWrite!"Sample: %s, ADSR/gain: %s, tuning: %s"(sampleID, adsrGain, (tuning << 8) + tuningFraction);
+			sink.formattedWrite!"Sample: %s, ADSR/gain: %s, tuning: %s"(sampleID, adsrGain, tuning);
 		} catch (Exception) {}
 	}
 }
@@ -667,7 +670,7 @@ struct NSPCPlayer {
 		if (!samp[idata.sampleID].data) {
 			assert(0, format!"no data for instrument %s"(inst));
 		}
-		if ((idata.tuning == 0) && (idata.tuningFraction == 0)) {
+		if (idata.tuning == 0) {
 			assert(0, format!"bad instrument %s"(inst));
 		}
 
@@ -702,7 +705,7 @@ struct NSPCPlayer {
 		freq >>= 6 - octave;
 
 
-		freq *= (cast(ushort)instruments[c.inst].tuning << 8) + instruments[c.inst].tuningFraction;
+		freq *= instruments[c.inst].tuning;
 		freq >>= 8;
 		freq &= 0x3fff;
 
@@ -1649,7 +1652,7 @@ struct NSPCPlayer {
 		enforce!NSPCException(id < instruments.length, format!"Invalid instrument %s - Index out of bounds"(id));
 		const idata = instruments[id];
 		enforce!NSPCException(samp[idata.sampleID].isValid, format!"Invalid instrument %s - Invalid sample %s"(id, idata.sampleID));
-		enforce!NSPCException((idata.tuning != 0) || (idata.tuningFraction != 0), format!"Invalid instrument %s - bad tuning"(id));
+		enforce!NSPCException(idata.tuning != 0, format!"Invalid instrument %s - bad tuning"(id));
 	}
 	/// Sets the playback speed. Default value is NSPCPlayer.defaultSpeed.
 	public void setSpeed(ushort rate) @safe nothrow {
