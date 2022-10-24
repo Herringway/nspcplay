@@ -13,16 +13,40 @@ align(1) struct PackPointer {
 }
 
 int main(string[] args) {
-	auto rom = cast(ubyte[])std.file.read(args[1]);
-	if (rom[0x7FC0 .. 0x7FD5] == "KIRBY SUPER DELUXE   ") {
-		extractKSS(rom, args[2]);
-	} else if (rom[0xFFC0 .. 0xFFD5] == "EARTH BOUND          ") {
-		extractEarthbound(rom, args[2]);
+	const rom = readROM(args[1]);
+	mkdirRecurse(args[2]);
+	if (rom.title == "KIRBY SUPER DELUXE   ") {
+		extractKSS(rom.data, args[2]);
+	} else if (rom.title == "EARTH BOUND          ") {
+		extractEarthbound(rom.data, args[2]);
 	} else {
-		writeln("I don't know what that is.");
+		writefln!"I don't know what '%s' is."(rom.title);
 		return 1;
 	}
 	return 0;
+}
+
+struct ROMFile {
+	string title;
+	const ubyte[] data;
+}
+
+ROMFile readROM(string path) {
+	const rom = cast(ubyte[])std.file.read(path);
+	immutable headerOffsets = [
+		0x7FB0: false, //lorom
+		0xFFB0: false, //hirom
+		0x81B0: true, //lorom + copier header
+		0x101B0: true, //hirom + copier header
+	];
+	foreach (offset, stripHeader; headerOffsets) {
+		const ushort checksum = (cast(const(ushort)[])rom[offset + 44 .. offset + 46])[0];
+		const ushort checksumComplement = (cast(const(ushort)[])rom[offset + 46 .. offset + 48])[0];
+		if ((checksum ^ checksumComplement) == 0xFFFF) {
+			return ROMFile((cast(char[])rom[offset + 16 .. offset + 37]).idup, rom[stripHeader ? 0x200 : 0 .. $]);
+		}
+	}
+	return ROMFile.init;
 }
 
 const(ubyte[]) readPacks(const ubyte[] input) {
@@ -59,7 +83,6 @@ void extractEarthbound(const scope ubyte[] data, string outDir) {
 	enum SONG_POINTER_TABLE = 0x26298C;
 	auto bgmPacks = cast(ubyte[3][])data[BGM_PACK_TABLE .. BGM_PACK_TABLE + (ubyte[3]).sizeof * NUM_SONGS];
 	auto songPointers = cast(ushort[])data[SONG_POINTER_TABLE .. SONG_POINTER_TABLE + ushort.sizeof * NUM_SONGS];
-	mkdirRecurse("songs/eb");
 	foreach (idx, songPacks; bgmPacks) {
 		infof("Song ID: 0x%03X", idx);
 		auto file = File(buildPath(outDir, format!"%03X.nspc"(idx)), "w");
