@@ -1141,20 +1141,22 @@ struct NSPCPlayer {
 			}
 			foreach (idx, instrument; cast(const(PrototypeInstrument)[])(buffer[header.instrumentBase .. header.instrumentBase + instrumentCount * PrototypeInstrument.sizeof])) {
 				instruments ~= cast(Instrument)instrument;
-				debug(nspclogging) tracef("%s. %s", idx, instrument);
 			}
 			percussionBase = instrumentCount;
 			foreach (idx, percussion; cast(const(PrototypePercussion)[])(buffer[header.extra.percussionBase .. header.extra.percussionBase + maxInstruments * PrototypePercussion.sizeof])) {
 				instruments ~= cast(Instrument)percussion;
 				percussionNotes[idx] = cast(ubyte)(percussion.note - 0x80);
-				debug(nspclogging) tracef("%s. %s", idx, percussion);
 			}
 		} else {
 			foreach (idx, instrument; cast(const(Instrument)[])(buffer[header.instrumentBase .. header.instrumentBase + maxInstruments * Instrument.sizeof])) {
 				instruments ~= instrument;
-				debug(nspclogging) tracef("%s. %s", idx, instrument);
 			}
 			percussionNotes = 0x24;
+		}
+		debug(nspclogging) foreach (idx, instrument; instruments) {
+			 if (samp[instrument.sampleID].isValid && instrument.tuning != 0) {
+				tracef("%s (%s) - %s", idx, ((percussionBase > 0) && (idx > percussionBase)) ? "Percussion" : "Standard", instrument);
+			}
 		}
 	}
 
