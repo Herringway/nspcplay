@@ -5,6 +5,8 @@ import core.stdc.stdlib;
 import core.stdc.string;
 import core.memory;
 import std.algorithm.comparison;
+import std.algorithm.searching;
+import std.algorithm.sorting;
 import std.exception;
 import std.experimental.logger;
 import std.format;
@@ -390,6 +392,7 @@ private struct Phrase {
 	PhraseType type;
 	ushort id;
 	ushort jumpTimes;
+	bool unallocated;
 	void toString(S)(ref S sink) const {
 		final switch (type) {
 			case PhraseType.pattern:
@@ -1373,7 +1376,6 @@ struct NSPCPlayer {
 	}
 
 	private void decompileSong(scope ubyte[] data, ref Song song, int startAddress, int endAddress) @safe {
-		ushort[] subTable;
 		int patterns;
 		song = song.init;
 		song.address = cast(ushort) startAddress;
@@ -1428,6 +1430,7 @@ struct NSPCPlayer {
 		const phrases = wpO[0 .. index];
 		// Now the number of patterns is known, so go back and get the order
 		size_t idx;
+		ushort[] extraPatterns;
 		foreach (ref order; song.order) {
 			if (phrases[idx] == 0) {
 				order.type = PhraseType.end;
@@ -1446,84 +1449,110 @@ struct NSPCPlayer {
 				order.id = phraseID(phrases[idx]);
 			} else {
 				order.type = PhraseType.pattern;
-				int pat = phrases[idx] - firstPattern;
-				enforce!NSPCException(!(pat & 15), format!"Bad pattern pointer: %x"(pat + firstPattern));
-				order.id = cast(ushort)(pat >> 4);
-				patterns = max((pat >> 4) + 1, patterns);
+				if (phrases[idx] >= firstPattern) {
+					int pat = phrases[idx] - firstPattern;
+					order.id = cast(ushort)(pat >> 4);
+					patterns = max((pat >> 4) + 1, patterns);
+				} else {
+					if (!extraPatterns.canFind(phrases[idx])) {
+						debug(nspclogging) tracef("Allocating new phrase: %04X", phrases[idx]);
+						extraPatterns ~= phrases[idx];
+					}
+					order.id = phrases[idx];
+					order.unallocated = true;
+				}
 			}
 			idx++;
+		}
+		sort(extraPatterns);
+		foreach (newPatternID, extraPattern; extraPatterns) {
+			foreach (ref phrase; song.order) {
+				if (phrase.id == extraPattern) {
+					assert(phrase.unallocated);
+					debug infof("%s, %s", patterns, newPatternID);
+					phrase.id = cast(ushort)(patterns + newPatternID);
+					phrase.unallocated = false;
+				}
+			}
+			patterns++;
 		}
 
 		debug(nspclogging) tracef("Phrases: %(%s, %)", song.order);
 		validatePhrases();
 
-		subTable = null;
 		song.pattern = new Track[8][](patterns);
 		song.sub = null;
 
 		index = fpIndex;
+		ushort[] subTable;
 		for (int trk = 0; trk < song.pattern.length * 8; trk++) {
 			Track* t = &song.pattern[trk / 8][trk % 8];
-			int start = wpO[index++];
+			ushort start = wpO[index++];
 			if (start == 0) {
 				continue;
 			}
-
 			// Go through track list (patterns) and find first track that has an address higher than us.
 			// If we find a track after us, we'll assume that this track doesn't overlap with that one.
 			// If we don't find one, then next will remain at 0x10000 and we will search until the
 			// end of memory to find a 00 byte to terminate the track.
-			int next = 0x10000; // offset of following track
+			uint next = 0x10000; // offset of following track
+			if (start < startAddress) {
+				next = startAddress;
+			}
 			for (int trackIndex = 0; trackIndex < (song.pattern.length * 8); trackIndex += 1) {
 				int trackAddress = wpO[fpIndex + trackIndex];
 				if (trackAddress < next && trackAddress > start) {
 					next = trackAddress;
 				}
 			}
-			// Determine the end of the track.
-			const(ubyte)[] trackEnd = data[start .. next];
-			while (trackEnd.length > 0 && trackEnd[0] != 0) {
-				trackEnd = nextCode(trackEnd);
-			}
-
-			t.size = cast(int)(next - start - trackEnd.length);
-			t.track = new ubyte[](t.size + 1);
-			t.track[0 .. t.size] = data[start .. start + t.size];
-			t.track[t.size] = 0;
-
-			for (ubyte[] p = t.track[0 .. t.size]; p.length > 0; p = nextCode(p)) {
-				if (p[0] != 0xEF) {
-					continue;
-				}
-				int subPtr = (cast(const(ushort)[])(p[1 .. 3]))[0];
-				int subEntry;
-
-				// find existing entry in subTable
-				for (subEntry = 0; subEntry < song.sub.length && subTable[subEntry] != subPtr; subEntry++) {
-				}
-				if (subEntry == song.sub.length) {
-					// subEntry doesn't already exist in subTable; create it
-					song.sub.length++;
-
-					subTable = new ushort[](song.sub.length);
-					subTable[subEntry] = cast(ushort) subPtr;
-
-					Track* st = &song.sub[subEntry];
-
-					ubyte[] substart = data[subPtr .. $];
-					const(ubyte)[] subend = substart;
-					while (subend[0] != 0) {
-						subend = nextCode(subend);
-					}
-					st.size = cast(int)(&subend[0] - &substart[0]);
-					st.track = new ubyte[](st.size + 1);
-					st.track[0 .. st.size + 1] = substart[0 .. st.size + 1];
-					validateTrack(st.track[0 .. st.size], true);
-				}
-				(cast(ushort[])(p[1 .. 3]))[0] = cast(ushort) subEntry;
-			}
-			validateTrack(t.track[0 .. t.size], false);
+			decompileTrack(data, start, next, *t, song, subTable);
 		}
+	}
+	private void decompileTrack(scope const ubyte[] data, ushort start, uint next, ref Track t, ref Song song, ref ushort[] subTable) @safe {
+		// Determine the end of the track.
+		const(ubyte)[] trackEnd = data[start .. next];
+		while (trackEnd.length > 0 && trackEnd[0] != 0) {
+			trackEnd = nextCode(trackEnd);
+		}
+
+		t.size = cast(int)(next - start - trackEnd.length);
+		t.track = new ubyte[](t.size + 1);
+		t.track[0 .. t.size] = data[start .. start + t.size];
+		t.track[t.size] = 0;
+
+		for (ubyte[] p = t.track[0 .. t.size]; p.length > 0; p = nextCode(p)) {
+			const commandClass = getCommandClass(p[0]);
+			if ((commandClass != VCMDClass.special) || (getCommand(p[0])  != VCMD.subRoutine)) {
+				continue;
+			}
+			int subPtr = (cast(const(ushort)[])(p[1 .. 3]))[0];
+			int subEntry;
+
+			// find existing entry in subTable
+			for (subEntry = 0; subEntry < song.sub.length && subTable[subEntry] != subPtr; subEntry++) {
+			}
+			if (subEntry == song.sub.length) {
+				// subEntry doesn't already exist in subTable; create it
+				song.sub.length++;
+
+				subTable = new ushort[](song.sub.length);
+				subTable[subEntry] = cast(ushort) subPtr;
+
+				Track* st = &song.sub[subEntry];
+
+				const(ubyte)[] substart = data[subPtr .. $];
+				const(ubyte)[] subend = substart;
+				while (subend[0] != 0) {
+					subend = nextCode(subend);
+				}
+				st.size = cast(int)(&subend[0] - &substart[0]);
+				st.track = new ubyte[](st.size + 1);
+				st.track[0 .. st.size + 1] = substart[0 .. st.size + 1];
+				validateTrack(st.track[0 .. st.size], true);
+			}
+			(cast(ushort[])(p[1 .. 3]))[0] = cast(ushort) subEntry;
+		}
+		validateTrack(t.track[0 .. t.size], false);
 	}
 
 	private void decodeSamples(scope const ubyte[] buffer, const scope ushort[2][] ptrtable) nothrow @safe {
@@ -1590,6 +1619,7 @@ struct NSPCPlayer {
 		bool endFound;
 		foreach (phrase; currentSong.order) {
 			enforce!NSPCException(!endFound, "Phrases found after end of song");
+			enforce!NSPCException(!phrase.unallocated, "Unallocated phrase found");
 			final switch (phrase.type) {
 				case PhraseType.end:
 					endFound = true;
