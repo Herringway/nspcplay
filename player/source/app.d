@@ -109,6 +109,7 @@ int main(string[] args) {
 		writeln("Press enter to exit");
 		readln();
 	}
+	nspc.stop();
 
 	return 0;
 }
