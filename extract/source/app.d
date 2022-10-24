@@ -19,6 +19,8 @@ int main(string[] args) {
 		extractKSS(rom.data, args[2]);
 	} else if (rom.title == "EARTH BOUND          ") {
 		extractEarthbound(rom.data, args[2]);
+	} else if (rom.title == "SUPER MARIOWORLD     ") {
+		extractSMW(rom.data, args[2]);
 	} else {
 		writefln!"I don't know what '%s' is."(rom.title);
 		return 1;
@@ -152,4 +154,82 @@ void extractKSS(const scope ubyte[] data, string outDir) {
 		//}
 		file.rawWrite(seqPackData);
 	}
+}
+
+void extractSMW(const scope ubyte[] data, string outDir) {
+	const progOffset = 0x70000;
+	const sfxOffset = 0x78000;
+	const seq1Offset = 0x718B1;
+	const seq2Offset = 0x72ED6;
+	const seq3Offset = 0x1E400;
+	const progPack = readPacks(data[progOffset .. $]);
+	const sfxPack = readPacks(data[sfxOffset .. $]);
+	const seq1Pack = readPacks(data[seq1Offset .. $]);
+	const seq2Pack = readPacks(data[seq2Offset .. $]);
+	const seq3Pack = readPacks(data[seq3Offset .. $]);
+	const parsedProg = parsePacks(progPack);
+	const parsedSeq1 = parsePacks(seq1Pack);
+	const parsedSeq2 = parsePacks(seq2Pack);
+	const parsedSeq3 = parsePacks(seq3Pack);
+	enum tableBase = 0x135E;
+	const(ubyte)[] writablePack(const Pack pack) {
+		const(ubyte)[] result;
+		const ushort[] packHeader = [pack.size, pack.address];
+		result ~= cast(const(ubyte)[])packHeader ~ pack.data;
+		return result;
+	}
+	foreach (bank, pack; chain(parsedProg, parsedSeq1, parsedSeq2, parsedSeq3).enumerate) {
+		if (pack.address == 0x1360) {
+			ushort currentOffset = tableBase;
+			ushort lowest = ushort.max;
+			foreach (idx, songAddr; cast(const(ushort)[])pack.data[0 .. 255 * 2]) {
+				currentOffset += 2;
+				if (lowest <= currentOffset) {
+					break;
+				}
+				const filename = format!"%s - %02X.nspc"(bank, idx);
+				auto file = File(buildPath(outDir, filename), "w");
+				infof("Writing %s", filename);
+				NSPCFileHeader header;
+				header.songBase = songAddr;
+				header.sampleBase = 0x8000;
+				header.instrumentBase = 0x5F46;
+				header.variant = nspc.Variant.prototype;
+				header.extra.percussionBase = 0x5FA5;
+				header.volumeTable = VolumeTable.nintendo;
+				header.releaseTable = ReleaseTable.nintendo;
+				file.rawWrite([header]);
+				file.rawWrite(writablePack(parsedProg[1]));
+				file.rawWrite(sfxPack);
+				file.rawWrite(writablePack(pack));
+				file.rawWrite([cast(ubyte)0, 0]);
+				lowest = min(songAddr, lowest);
+			}
+		}
+	}
+}
+
+struct Pack {
+	ushort size;
+	ushort address;
+	const(ubyte)[] data;
+}
+
+const(Pack)[] parsePacks(const(ubyte)[] input) {
+	const(Pack)[] result;
+	size_t offset = 0;
+	while (offset < input.length) {
+		Pack pack;
+		auto size = (cast(ushort[])(input[offset .. offset + 2]))[0];
+		if (size == 0) {
+			break;
+		}
+		auto spcOffset = (cast(ushort[])(input[offset + 2 .. offset + 4]))[0];
+		pack.size = size;
+		pack.address = spcOffset;
+		pack.data = input[offset + 4 .. offset + size + 4];
+		result ~= pack;
+		offset += size + 4;
+	}
+	return result;
 }
