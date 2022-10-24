@@ -1029,7 +1029,7 @@ struct NSPCPlayer {
 	private void loadPattern() nothrow @safe {
 		state.ordnum++;
 		const nextPhrase = currentSong.order[state.ordnum];
-		debug(nspclogging) tracef("Now playing %s", nextPhrase);
+		debug(nspclogging) tracef("Next phrase: %s", nextPhrase);
 		final switch (nextPhrase.type) {
 			case PhraseType.end:
 				state.ordnum--;
