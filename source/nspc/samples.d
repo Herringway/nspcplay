@@ -170,12 +170,18 @@ private int getFullLoopLength(const Sample sa, const short[2] nextBlock, int fir
 enum Interpolation {
 	gaussian,
 	linear,
+	cubic,
+	sinc,
 }
 
 short interpolate(Interpolation style, scope const short[] buf, int position) nothrow @safe pure {
 	final switch (style) {
 		case Interpolation.gaussian:
 			return gaussianInterpolation(buf[0 .. 4], (position >> 4) & 0xFF);
+		case Interpolation.cubic:
+			return cubicInterpolation(buf[0 .. 4], (position >> 4) & 0xFF);
+		case Interpolation.sinc:
+			return sincInterpolation(buf[0 .. 8], (position & 0xFF0) >> 1);
 		case Interpolation.linear:
 			return linearInterpolation(buf[0 .. 2], position & 0xFFF);
 	}
@@ -210,4 +216,41 @@ unittest {
 	assert(gaussianInterpolation([0, 0, 0, 0], 0) == 0);
 	assert(gaussianInterpolation([0, 0, 0x100, 0x600], 0x55) == 0x6E);
 	assert(gaussianInterpolation([0, 0x100, 0x600, 0x400], 0) == 0x1BA);
+}
+
+short cubicInterpolation(short[4] latest, ubyte index) nothrow @safe pure {
+	const(short)[] fwd = cubic[index .. index + 258];
+	const(short)[] rev = cubic[256 - index  .. 514 - index]; // mirror left half
+
+	int result;
+	result = (fwd[0] * latest[0]);
+	result += (fwd[257] * latest[1]);
+	result += (rev[257] * latest[2]);
+	result += (rev[0] * latest[3]);
+	result >>= 11;
+
+	if (cast(short)result != result) {
+		result = (result >> 31) ^ 0x7FFF;
+	}
+	return cast(short)result;
+}
+
+short sincInterpolation(short[8] latest, ushort index) nothrow @safe pure {
+	const(short)[] selection = sinc[index .. index + 8];
+
+	int result;
+	result = selection[0] * latest[0];
+	result += selection[1] * latest[1];
+	result += selection[2] * latest[2];
+	result += selection[3] * latest[3];
+	result += selection[4] * latest[4];
+	result += selection[5] * latest[5];
+	result += selection[6] * latest[6];
+	result += selection[7] * latest[7];
+	result >>= 14;
+
+	if (cast(short)result != result) {
+		result = (result >> 31) ^ 0x7FFF;
+	}
+	return cast(short)result;
 }
