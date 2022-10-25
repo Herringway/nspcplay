@@ -1335,7 +1335,7 @@ struct NSPCPlayer {
 			try {
 				samp[sn] = decodeSample(buffer, start, loop);
 			} catch (Exception e) {
-				debug tracef("Couldn't load sample: %s", e.msg);
+				debug tracef("Couldn't load sample %d: %s", sn, e.msg);
 			}
 		}
 	}
