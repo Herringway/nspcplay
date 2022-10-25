@@ -103,6 +103,8 @@ private struct ChannelState {
 	ADSRPhase adsrPhase;
 	ushort adsrCounter;
 	ubyte adsrRate;
+
+	short[8] interpolationBuffer;
 	void setADSRPhase(ADSRPhase phase) @safe pure nothrow {
 		adsrCounter = 0;
 		adsrPhase = phase;
@@ -457,6 +459,7 @@ struct NSPCPlayer {
 	private Variant variant;
 	private ubyte[256] percussionNotes;
 	private size_t percussionBase;
+	Interpolation interpolation = Interpolation.gaussian;
 	///
 	short[2][] fillBuffer(short[2][] buffer) nothrow @safe {
 		if (!songPlaying) {
@@ -487,6 +490,19 @@ struct NSPCPlayer {
 					assert(0, format!"Sample position exceeds sample length! %d > %d"(ipos, channel.sample.data.length));
 				}
 
+				foreach (idx, ref interpolationSample; channel.interpolationBuffer) {
+					size_t offset = ipos + idx;
+					while (channel.sample.loopLength && (offset >= channel.sample.data.length)) {
+						offset -= channel.sample.loopLength;
+					}
+					if (offset < channel.sample.data.length) {
+						interpolationSample = channel.sample.data[offset];
+					} else {
+						interpolationSample = channel.interpolationBuffer[idx - 1];
+					}
+				}
+				int s1 = interpolate(interpolation, channel.interpolationBuffer[], channel.samplePosition >> 3);
+
 				if (channel.adsrRate && (++channel.adsrCounter >= cast(int)(adsrGainRates[channel.adsrRate] * (mixrate / 44100.0)))) {
 					doADSR(channel);
 					channel.adsrCounter = 0;
@@ -494,10 +510,6 @@ struct NSPCPlayer {
 				if (channel.gain == 0) {
 					continue;
 				}
-				assert(channel.sample.data);
-				int s1 = channel.sample.data[ipos];
-				int s2 = (ipos + 1 == channel.sample.data.length) ? s1 : channel.sample.data[ipos + 1];
-				s1 += (s2 - s1) * (channel.samplePosition & 0x7FFF) >> 15;
 				s1 = (s1 * channel.gain) >> 11;
 
 				left += cast(int)(s1 * channel.leftVolume / 128.0);

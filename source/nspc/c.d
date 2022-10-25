@@ -7,7 +7,9 @@ import core.sys.windows.dll;
 
 private const(char)* lastError;
 
-mixin SimpleDllMain;
+version(unittest) {} else {
+	mixin SimpleDllMain;
+}
 
 export nothrow extern(C):
 

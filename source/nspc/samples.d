@@ -1,5 +1,7 @@
 module nspc.samples;
 
+import nspc.interpolationtables;
+
 private enum brrBlockSize = 9;
 private enum brrFlagEnd = 1;
 private enum brrFlagLoop = 2;
@@ -74,7 +76,7 @@ Sample decodeSample(scope const ubyte[] buffer, ushort start, ushort loop) @safe
 		// In the vanilla game, the most iterations needed is 48 (for sample 0x17 in pack 5).
 		// Most samples need less than 10.
 		++times;
-	} while (needsAnotherLoop && times < 128);
+	} while (needsAnotherLoop && times < 256);
 
 	assert(!needsAnotherLoop, "Sample took too many iterations to get into a cycle");
 	return sample;
@@ -117,11 +119,12 @@ void decodeBRRBlock(scope short[] buffer, short[2] lastSamples, const scope ubyt
 				break;
 		}
 
-		s *= 2;
-
 		if (cast(short) s != s) {
 			s = (s >> 31) ^ 0x7FFF;
 		}
+
+		s *= 2;
+
 
 		lastSamples[0] = lastSamples[1];
 		lastSamples[1] = cast(short) s;
@@ -162,4 +165,49 @@ private int getFullLoopLength(const Sample sa, const short[2] nextBlock, int fir
 	} else {
 		return -1;
 	}
+}
+
+enum Interpolation {
+	gaussian,
+	linear,
+}
+
+short interpolate(Interpolation style, scope const short[] buf, int position) nothrow @safe pure {
+	final switch (style) {
+		case Interpolation.gaussian:
+			return gaussianInterpolation(buf[0 .. 4], (position >> 4) & 0xFF);
+		case Interpolation.linear:
+			return linearInterpolation(buf[0 .. 2], position & 0xFFF);
+	}
+}
+
+short linearInterpolation(short[2] latest, ushort val) nothrow @safe pure {
+	int result = (4096 - val) * latest[0];
+	result += val * latest[1];
+	result >>= 12;
+	return cast(short)result;
+}
+
+short gaussianInterpolation(short[4] latest, ubyte index) nothrow @safe pure {
+	const(short)[] fwd = gauss[255 - index .. 512 - index];
+	const(short)[] rev = gauss[index .. index + 257]; // mirror left half of gaussian
+
+	int result;
+	result = (fwd[0] * latest[0]) >> 11;
+	result += (fwd[256] * latest[1]) >> 11;
+	result += (rev[256] * latest[2]) >> 11;
+	result = cast(short)result;
+	result += (rev[0] * latest[3]) >> 11;
+
+	if (cast(short)result != result) {
+		result = (result >> 31) ^ 0x7FFF;
+	}
+	result &= ~1;
+	return cast(short)result;
+}
+
+unittest {
+	assert(gaussianInterpolation([0, 0, 0, 0], 0) == 0);
+	assert(gaussianInterpolation([0, 0, 0x100, 0x600], 0x55) == 0x6E);
+	assert(gaussianInterpolation([0, 0x100, 0x600, 0x400], 0) == 0x1BA);
 }
