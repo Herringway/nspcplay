@@ -551,19 +551,13 @@ struct NSPCPlayer {
 		s.target = cast(ubyte) target;
 	}
 
-	private void setInstrument(ref SongState st, ref ChannelState c, uint inst) nothrow @safe {
-		if (inst > 0x80) {
-			inst += st.firstCAInst + percussionBase - percussionID(variant);
-		}
+	private void setInstrument(ref SongState st, ref ChannelState c, size_t inst) nothrow @safe {
 		if (inst >= instruments.length) {
 			assert(0, format!"instrument %s out of bounds!"(inst));
 		}
 		const idata = instruments[inst];
 		if (!samp[idata.sampleID].data) {
 			assert(0, format!"no data for instrument %s"(inst));
-		}
-		if (idata.tuning == 0) {
-			assert(0, format!"bad instrument %s"(inst));
 		}
 
 		c.inst = cast(ubyte) inst;
@@ -625,7 +619,7 @@ struct NSPCPlayer {
 	private void doCommand(ref SongState st, ref ChannelState c, const Command command) nothrow @safe {
 		final switch (command.special) {
 			case VCMD.instrument:
-				setInstrument(st, c, command.parameters[0]);
+				setInstrument(st, c, absoluteInstrumentID(command.parameters[0], st.firstCAInst, false));
 				break;
 			case VCMD.panning:
 				c.panFlags = command.parameters[0];
@@ -735,8 +729,7 @@ struct NSPCPlayer {
 		ubyte note = command.note;
 		// using >=CA as a note switches to that instrument and plays a predefined note
 		if (command.type == VCMDClass.percussion) {
-			const ubyte inst = cast(ubyte)(percussionBase + st.firstCAInst + note);
-			setInstrument(st, c, inst);
+			setInstrument(st, c, absoluteInstrumentID(note, st.firstCAInst, true));
 			note = cast(ubyte)(percussionNotes[note]);
 		}
 		if (command.type.among(VCMDClass.percussion, VCMDClass.note)) {
@@ -1271,6 +1264,7 @@ struct NSPCPlayer {
 
 		index = fpIndex;
 		ushort[] subTable;
+		ubyte tmpPercussionBase;
 		for (int trk = 0; trk < song.pattern.length * 8; trk++) {
 			Track* t = &song.pattern[trk / 8][trk % 8];
 			ushort start = wpO[index++];
@@ -1291,10 +1285,10 @@ struct NSPCPlayer {
 					next = trackAddress;
 				}
 			}
-			decompileTrack(copyData, start, next, *t, song, subTable);
+			decompileTrack(copyData, start, next, *t, song, subTable, tmpPercussionBase);
 		}
 	}
-	private void decompileTrack(immutable(ubyte)[] data, ushort start, uint next, ref Track t, ref Song song, ref ushort[] subTable) @safe {
+	private void decompileTrack(immutable(ubyte)[] data, ushort start, uint next, ref Track t, ref Song song, ref ushort[] subTable, ref ubyte tmpPercussionBase) @safe {
 		// Determine the end of the track.
 		const(ubyte)[] trackEnd = data[start .. $];
 		size_t length;
@@ -1320,7 +1314,7 @@ struct NSPCPlayer {
 					}
 					st.size = cast(int)(subTotalLength + 1);
 					st.track = data[subPtr .. subPtr + subTotalLength + 1];
-					validateTrack(st.track, true);
+					validateTrack(st.track, true, tmpPercussionBase);
 					return st;
 				}());
 			}
@@ -1328,7 +1322,7 @@ struct NSPCPlayer {
 		t.size = cast(int)(totalLength);
 		t.track = data[start .. start + t.size];
 
-		validateTrack(t.track, false);
+		validateTrack(t.track, false, tmpPercussionBase);
 	}
 
 	private void decodeSamples(scope const ubyte[] buffer, const scope ushort[2][] ptrtable) nothrow @safe {
@@ -1346,9 +1340,8 @@ struct NSPCPlayer {
 		}
 	}
 
-	private void validateTrack(scope const ubyte[] track, bool isSub) @safe {
+	private void validateTrack(scope const ubyte[] track, bool isSub, ref ubyte tmpPercussionBase) @safe {
 		const(ubyte)[] data = track;
-		ubyte tmpPercussionBase;
 		bool endReached;
 		while (data.length > 0) {
 			size_t length;
@@ -1363,13 +1356,13 @@ struct NSPCPlayer {
 					enforce!NSPCException(data.length > 0, "Track can not end with note-length code");
 					break;
 				case VCMDClass.percussion:
-					validateInstrument(command.instrument, tmpPercussionBase, true);
+					validateInstrument(absoluteInstrumentID(command.instrument, tmpPercussionBase, true));
 					break;
 				case VCMDClass.special:
-					//enforce!NSPCException(command.special != VCMD.invalid, format!"Invalid code command %s"(command));
+					enforce!NSPCException(command.special != VCMD.invalid, format!"Invalid code command %s"(command));
 
 					if (command.special == VCMD.instrument) {
-						validateInstrument(command.parameters[0], 0, false);
+						validateInstrument(absoluteInstrumentID(command.parameters[0], tmpPercussionBase, false));
 					}
 					if (command.special == VCMD.subRoutine) {
 						enforce!NSPCException(!isSub, "Can't call sub from within a sub");
@@ -1411,18 +1404,23 @@ struct NSPCPlayer {
 		enforce!NSPCException(currentSong.order.length > 0, "No phrases loaded");
 		enforce!NSPCException(currentSong.order[$ - 1].type == PhraseType.end, "Phrase list must have an end phrase");
 	}
-	private void validateInstrument(size_t id, size_t base, bool percussion) const @safe {
-		if (id > 0x80) {
+	private void validateInstrument(size_t id) const @safe {
+		enforce!NSPCException(id < instruments.length, format!"Invalid instrument %s - Index out of bounds"(id));
+		const idata = instruments[id];
+		enforce!NSPCException(samp[idata.sampleID].isValid, format!"Invalid instrument %s - Invalid sample %s"(id, idata.sampleID));
+		if (idata.tuning == 0) {
+			infof("Suspicious instrument %s - no tuning (will be silent)", id);
+		}
+	}
+	private size_t absoluteInstrumentID(size_t id, size_t base, bool percussion) const @safe pure nothrow {
+		if (id >= percussionID(variant)) {
 			percussion = true;
 			id -= percussionID(variant);
 		}
 		if (percussion) {
 			id += base + percussionBase;
 		}
-		enforce!NSPCException(id < instruments.length, format!"Invalid instrument %s - Index out of bounds"(id));
-		const idata = instruments[id];
-		enforce!NSPCException(samp[idata.sampleID].isValid, format!"Invalid instrument %s - Invalid sample %s"(id, idata.sampleID));
-		enforce!NSPCException(idata.tuning != 0, format!"Invalid instrument %s - bad tuning"(id));
+		return id;
 	}
 	/// Sets the playback speed. Default value is NSPCPlayer.defaultSpeed.
 	public void setSpeed(ushort rate) @safe nothrow {
