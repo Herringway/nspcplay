@@ -673,10 +673,7 @@ struct NSPCPlayer {
 				makeSlider(c.volume, command.parameters[0], command.parameters[1]);
 				break;
 			case VCMD.subRoutine:
-				//c.parser.subroutineStartAddress = command.parameters[0] | (command.parameters[1] << 8);
-				//c.parser.subRet = c.parser.ptr;
-				//c.parser.subroutineCount = command.parameters[2];
-				//c.parser.ptr = currentSong.subroutines[c.parser.subroutineStartAddress].track;
+				/// This is handled by the parser
 				break;
 			case VCMD.vibratoFadeIn:
 				c.vibratoFadeIn = command.parameters[0];
