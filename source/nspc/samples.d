@@ -1,18 +1,11 @@
 module nspc.samples;
 
+import nspc.common;
 import nspc.interpolationtables;
 
 private enum brrBlockSize = 9;
 private enum brrFlagEnd = 1;
 private enum brrFlagLoop = 2;
-
-struct Sample {
-	short[] data;
-	int loopLength;
-	bool isValid() const @safe pure nothrow {
-		return data.length > 0;
-	}
-}
 
 Sample decodeSample(scope const ubyte[] buffer, ushort start, ushort loop) @safe {
 	Sample sample;
@@ -165,13 +158,6 @@ private int getFullLoopLength(const Sample sa, const short[2] nextBlock, int fir
 	} else {
 		return -1;
 	}
-}
-
-enum Interpolation {
-	gaussian,
-	linear,
-	cubic,
-	sinc,
 }
 
 short interpolate(Interpolation style, scope const short[] buf, int position) nothrow @safe pure {

@@ -83,7 +83,7 @@ int main(string[] args) {
 
 	trace("Loading NSPC file");
 	// Load files
-	nspc.loadNSPCFile(file);
+	nspc.loadSong(loadNSPCFile(file));
 
 	nspc.play();
 	trace("Playing NSPC music");
