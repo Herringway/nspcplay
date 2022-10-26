@@ -1155,7 +1155,7 @@ struct NSPCPlayer {
 			percussionNotes = 0x24;
 		}
 		debug(nspclogging) foreach (idx, instrument; instruments) {
-			 if (samples[instrument.sampleID].isValid && instrument.tuning != 0) {
+			 if ((instrument.sampleID < samples.length) && samples[instrument.sampleID].isValid && (instrument.tuning != 0)) {
 				tracef("%s (%s) - %s", idx, ((percussionBase > 0) && (idx > percussionBase)) ? "Percussion" : "Standard", instrument);
 			}
 		}
