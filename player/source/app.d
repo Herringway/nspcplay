@@ -55,12 +55,14 @@ int main(string[] args) {
 	ushort speed = NSPCPlayer.defaultSpeed;
 	string outfile;
 	bool dumpBRRFiles;
+	Interpolation interpolation;
 	if (args.length < 2) {
 		return 1;
 	}
 
 	auto help = getopt(args,
 		"f|samplerate", "Sets sample rate (Hz)", &sampleRate,
+		"i|interpolation", "Sets interpolation (linear, gaussian, sinc, cubic)", &interpolation,
 		"b|brrdump", "Dumps BRR samples used", &dumpBRRFiles,
 		"o|outfile", "Dumps output to file", &outfile,
 		"v|verbose", "Print more verbose information", &verbose,
@@ -85,6 +87,7 @@ int main(string[] args) {
 	// Load files
 	nspc.loadSong(loadNSPCFile(file));
 
+	nspc.interpolation = interpolation;
 	nspc.play();
 	trace("Playing NSPC music");
 
