@@ -3,6 +3,8 @@ import std.experimental.logger;
 
 import nspc;
 
+immutable ushort[] packTerminator = [0];
+
 align(1) struct PackPointer {
 	align(1):
 	ubyte bank;
@@ -153,6 +155,7 @@ void extractKSS(const scope ubyte[] data, string outDir) {
 		file.rawWrite(instrPackData);
 		//}
 		file.rawWrite(seqPackData);
+		file.rawWrite(packTerminator);
 	}
 }
 
@@ -178,6 +181,7 @@ void extractSMW(const scope ubyte[] data, string outDir) {
 		result ~= cast(const(ubyte)[])packHeader ~ pack.data;
 		return result;
 	}
+	immutable ubyte[8][] firCoefficients = [[0xFF, 0x08, 0x17, 0x24, 0x24, 0x17, 0x08, 0xFF], [0x7F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]];
 	foreach (bank, pack; chain(parsedProg, parsedSeq1, parsedSeq2, parsedSeq3).enumerate) {
 		if (pack.address == 0x1360) {
 			ushort currentOffset = tableBase;
@@ -198,11 +202,14 @@ void extractSMW(const scope ubyte[] data, string outDir) {
 				header.extra.percussionBase = 0x5FA5;
 				header.volumeTable = VolumeTable.nintendo;
 				header.releaseTable = ReleaseTable.nintendo;
+				header.firCoefficientTableCount = 2;
 				file.rawWrite([header]);
 				file.rawWrite(writablePack(parsedProg[1]));
 				file.rawWrite(sfxPack);
 				file.rawWrite(writablePack(pack));
-				file.rawWrite([cast(ubyte)0, 0]);
+				file.rawWrite(packTerminator);
+				// FIR coefficients
+				file.rawWrite(firCoefficients);
 				lowest = min(songAddr, lowest);
 			}
 		}

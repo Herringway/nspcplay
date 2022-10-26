@@ -25,6 +25,23 @@ private struct SongState {
 	ubyte percussionBase; // set with FA
 	ubyte repeatCount;
 	int phraseCounter = -1;
+
+	ubyte fadeTicks;
+	ubyte targetEchoVolumeLeft;
+	ubyte targetEchoVolumeRight;
+	bool echoWrites;
+	ubyte echoOn;
+	ubyte echoRemaining = 1;
+	ubyte echoVolumeLeft;
+	ubyte echoVolumeRight;
+	ubyte echoDelay;
+	ubyte echoFeedbackVolume;
+	ushort echoBufferIndex;
+	ubyte firBufferIndex;
+	ushort[15000] echoBuffer;
+	ubyte[8] firCoefficients;
+	short[8] firLeft;
+	short[8] firRight;
 }
 
 private struct Slider {
@@ -171,6 +188,7 @@ private struct Song {
 	Phrase[] order;
 	Track[8][] pattern;
 	Track[ushort] subroutines;
+	const(ubyte[8])[] firCoefficients;
 }
 
 private struct Track {
@@ -180,6 +198,13 @@ private struct Track {
 
 // Rates (in samples) until next step is applied
 private immutable adsrGainRates = [ 0, 2048, 1536, 1280, 1024, 768, 640, 512, 384, 320, 256, 192, 160, 128, 96, 80, 64, 48, 40, 32, 24, 20, 16, 12, 10, 8, 6, 5, 4, 3, 2, 1 ];
+
+private immutable ubyte[8][] defaultFIRCoefficients = [
+	[0x7F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+	[0x58, 0xBF, 0xDB, 0xF0, 0xFE, 0x07, 0x0C, 0x0C],
+	[0x0C, 0x21, 0x2B, 0x2B, 0x13, 0xFE, 0xF3, 0xF9],
+	[0x34, 0x33, 0x00, 0xD9, 0xE5, 0x01, 0xFC, 0xEB],
+];
 
 // note style tables, from 6F80
 private immutable ubyte[8][] releaseTables = [
@@ -371,7 +396,7 @@ struct NSPCFileHeader {
 		struct { //Variant.prototype
 			ushort percussionBase;
 		}
-		ubyte[20] reserved;
+		ubyte[19] reserved;
 	}
 	/// Which version of NSPC to use
 	Variant variant;
@@ -387,6 +412,8 @@ struct NSPCFileHeader {
 	VolumeTable volumeTable;
 	/// Extra information for variants
 	Extra extra;
+	/// Number of FIR coefficient tables
+	ubyte firCoefficientTableCount;
 }
 
 void doADSR(ref ChannelState channel) nothrow @safe {
@@ -433,6 +460,47 @@ void doADSR(ref ChannelState channel) nothrow @safe {
 			break;
 	}
 	channel.gain = clamp(channel.gain, cast(short)0, cast(short)0x7FF);
+}
+
+void doEcho(ref SongState state, ref short leftSample, ref short rightSample) nothrow @safe {
+	const echoAddress = state.echoBufferIndex * 2;
+
+	state.firLeft[state.firBufferIndex] = state.echoBuffer[echoAddress % state.echoBuffer.length] >> 1;
+
+	state.firRight[state.firBufferIndex] = state.echoBuffer[(echoAddress + 1) % state.echoBuffer.length] >> 1;
+	short sumL = 0;
+	short sumR = 0;
+	for(int i = 0; i < 8; i++) {
+		sumL += (state.firLeft[(state.firBufferIndex + i + 1) & 0x7] * state.firCoefficients[i]) >> 6;
+		sumR += (state.firRight[(state.firBufferIndex + i + 1) & 0x7] * state.firCoefficients[i]) >> 6;
+	}
+
+	leftSample = cast(short)(leftSample + ((sumL * state.echoVolumeLeft) >> 7));
+	rightSample = cast(short)(rightSample + ((sumR * state.echoVolumeRight) >> 7));
+
+	short inLeft = 0;
+	short inRight = 0;
+	for(int i = 0; i < 8; i++) {
+		if(state.echoOn & (1 << i)) {
+			inLeft += (state.channels[i].interpolationBuffer[0] * state.channels[i].leftVolume) >> 6;
+			inRight += (state.channels[i].interpolationBuffer[0] * state.channels[i].rightVolume) >> 6;
+		}
+	}
+	inLeft += (sumL * state.echoFeedbackVolume) >> 7;
+	inRight += (sumR * state.echoFeedbackVolume) >> 7;
+	inLeft &= 0xfffe;
+	inRight &= 0xfffe;
+	if(state.echoWrites) {
+		state.echoBuffer[echoAddress] = inLeft;
+		state.echoBuffer[echoAddress + 1] = inRight;
+	}
+
+	state.firBufferIndex = (state.firBufferIndex + 1) & 7;
+	state.echoBufferIndex++;
+	if(--state.echoRemaining == 0) {
+		state.echoRemaining = state.echoDelay;
+		state.echoBufferIndex = 0;
+	}
 }
 
 ///
@@ -529,6 +597,7 @@ struct NSPCPlayer {
 			right = clamp(right, short.min, short.max);
 			sample[0] = cast(short) left;
 			sample[1] = cast(short) right;
+			doEcho(state, sample[0], sample[1]);
 		}
 		return buffer[0 .. length];
 	}
@@ -705,10 +774,22 @@ struct NSPCPlayer {
 				c.finetune = command.parameters[0];
 				break;
 			case VCMD.echoEnableBitsAndVolume:
+				st.echoOn = command.parameters[0];
+				st.echoVolumeLeft = command.parameters[1];
+				st.echoVolumeRight = command.parameters[2];
+				break;
 			case VCMD.echoOff:
+				st.echoOn = 0;
+				break;
 			case VCMD.echoParameterSetup:
+				st.echoDelay = command.parameters[0];
+				st.echoFeedbackVolume = command.parameters[1];
+				st.firCoefficients = currentSong.firCoefficients[command.parameters[2]];
+				break;
 			case VCMD.echoVolumeFade:
-				debug(nspclogging) warningf("Unhandled command: %s", command);
+				st.fadeTicks = command.parameters[0];
+				st.targetEchoVolumeLeft = command.parameters[1];
+				st.targetEchoVolumeRight = command.parameters[2];
 				break;
 			case VCMD.noop: //do nothing
 				break;
@@ -1094,7 +1175,7 @@ struct NSPCPlayer {
 		fakeHeader.sampleBase = sampleBase;
 		processInstruments(buffer, fakeHeader);
 	}
-	private void loadAllSubpacks(scope ubyte[] buffer, const(ubyte)[] pack) @safe {
+	private const(ubyte)[] loadAllSubpacks(scope ubyte[] buffer, const(ubyte)[] pack) @safe {
 		ushort size, base;
 		while (true) {
 			if (pack.length == 0) {
@@ -1110,6 +1191,7 @@ struct NSPCPlayer {
 			buffer[base .. base + size] = pack[4 .. size + 4];
 			pack = pack[size + 4 .. $];
 		}
+		return pack[2 .. $];
 	}
 
 	/// Load an NSPC file
@@ -1126,9 +1208,15 @@ struct NSPCPlayer {
 		debug(nspclogging) tracef("Release table: %s, volume table: %s", header.releaseTable, header.volumeTable);
 		assert(volumeTable < volumeTables.length, "Invalid volume table");
 		assert(releaseTable < releaseTables.length, "Invalid release table");
-		loadAllSubpacks(buffer[], data[NSPCFileHeader.sizeof .. $]);
+		const remaining = loadAllSubpacks(buffer[], data[NSPCFileHeader.sizeof .. $]);
 		processInstruments(buffer, header);
 		decompileSong(buffer[], currentSong, header.songBase, buffer.length - 1);
+		if (header.firCoefficientTableCount == 0) {
+			currentSong.firCoefficients = defaultFIRCoefficients;
+		} else {
+			currentSong.firCoefficients = cast(const(ubyte[8])[])remaining[0 .. 8 * header.firCoefficientTableCount];
+		}
+		debug(nspclogging) tracef("FIR coefficients: %s", currentSong.firCoefficients);
 	}
 
 	private void processInstruments(scope const ubyte[] buffer, const NSPCFileHeader header) @safe {
