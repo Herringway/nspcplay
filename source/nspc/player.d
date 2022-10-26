@@ -688,7 +688,8 @@ struct NSPCPlayer {
 		}
 	}
 
-	private void CF7(ref ChannelState c) nothrow @safe {
+	private void doKeySweepVibratoChecks(ref ChannelState c) nothrow @safe {
+		// key off
 		if (c.noteRelease) {
 			c.noteRelease--;
 		}
@@ -696,7 +697,7 @@ struct NSPCPlayer {
 			c.setADSRPhase(ADSRPhase.release);
 		}
 
-		// 0D60
+		// sweep
 		if (c.note.cycles) {
 			if (c.currentPortStartCounter == 0) {
 				c.note.slide();
@@ -706,7 +707,7 @@ struct NSPCPlayer {
 			}
 		}
 
-		// 0D79
+		// vibrato
 		if (c.currentVibratoRange) {
 			if (c.vibratoStartCounter == c.vibratoStart) {
 				int range;
@@ -737,7 +738,7 @@ struct NSPCPlayer {
 			}
 
 			if (--channel.next >= 0) {
-				CF7(channel);
+				doKeySweepVibratoChecks(channel);
 			} else {
 				loop: while (1) {
 					bool done;
