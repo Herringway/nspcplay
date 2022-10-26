@@ -283,11 +283,14 @@ struct NSPCPlayer {
 	Interpolation interpolation = Interpolation.gaussian;
 	///
 	short[2][] fillBuffer(short[2][] buffer) nothrow @safe {
+		enum left = 0;
+		enum right = 1;
 		if (!songPlaying) {
 			return [];
 		}
 		size_t length;
 		foreach (ref sample; buffer) {
+			sample[] = 0;
 			if ((state.nextTimerTick -= timerSpeed) < 0) {
 				state.nextTimerTick += mixrate;
 				if (!doTimer()) {
@@ -295,7 +298,6 @@ struct NSPCPlayer {
 				}
 			}
 			length++;
-			int left = 0, right = 0;
 			foreach (i, ref channel; state.channels) {
 				if (!(channelsEnabled & (1 << i))) {
 					continue;
@@ -333,8 +335,8 @@ struct NSPCPlayer {
 				}
 				s1 = (s1 * channel.gain) >> 11;
 
-				left += cast(int)(s1 * channel.leftVolume / 128.0);
-				right += cast(int)(s1 * channel.rightVolume / 128.0);
+				sample[left] += cast(int)(s1 * channel.leftVolume / 128.0);
+				sample[right] += cast(int)(s1 * channel.rightVolume / 128.0);
 
 				channel.samplePosition += channel.noteFrequency;
 				if ((channel.samplePosition >> 15) >= channel.sample.data.length) {
@@ -346,10 +348,6 @@ struct NSPCPlayer {
 					}
 				}
 			}
-			left = clamp(left, short.min, short.max);
-			right = clamp(right, short.min, short.max);
-			sample[0] = cast(short) left;
-			sample[1] = cast(short) right;
 			doEcho(state, sample[0], sample[1]);
 		}
 		return buffer[0 .. length];
