@@ -64,6 +64,11 @@ void buildNSPCFromSPC(string[] args) {
 		filename = args[1].baseName.withExtension(".nspc").text;
 	}
 	auto spcFile = cast(ubyte[])read(args[1]);
+	if (header.sampleBase == 0) {
+		const sampleDirectory = spcFile[0x1015D];
+		infof("Using auto-detected sample directory: %04X", sampleDirectory << 8);
+		header.sampleBase = sampleDirectory << 8;
+	}
 	auto f = File(filename, "w");
 	f.rawWrite([header]);
 	f.rawWrite(cast(ushort[])[65535, 0]);
