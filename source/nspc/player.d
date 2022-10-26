@@ -33,7 +33,7 @@ private struct SongState {
 	ubyte echoFeedbackVolume;
 	ushort echoBufferIndex;
 	ubyte firBufferIndex;
-	ushort[15000] echoBuffer;
+	short[15000] echoBuffer;
 	ubyte[8] firCoefficients;
 	short[8] firLeft;
 	short[8] firRight;
@@ -117,6 +117,7 @@ private struct ChannelState {
 	ubyte adsrRate;
 
 	short[8] interpolationBuffer;
+	short lastSample;
 	void setADSRPhase(ADSRPhase phase) @safe pure nothrow {
 		adsrCounter = 0;
 		adsrPhase = phase;
@@ -226,37 +227,43 @@ void doADSR(ref ChannelState channel) nothrow @safe {
 	channel.gain = clamp(channel.gain, cast(short)0, cast(short)0x7FF);
 }
 
-void doEcho(ref SongState state, ref short leftSample, ref short rightSample) nothrow @safe {
+void doEcho(ref SongState state, ref short leftSample, ref short rightSample, int mixrate) nothrow @safe {
 	const echoAddress = state.echoBufferIndex * 2;
 
 	state.firLeft[state.firBufferIndex] = state.echoBuffer[echoAddress % state.echoBuffer.length] >> 1;
 
 	state.firRight[state.firBufferIndex] = state.echoBuffer[(echoAddress + 1) % state.echoBuffer.length] >> 1;
-	short sumL = 0;
-	short sumR = 0;
+	int sumLeft = 0;
+	int sumRight = 0;
 	for(int i = 0; i < 8; i++) {
-		sumL += (state.firLeft[(state.firBufferIndex + i + 1) & 0x7] * state.firCoefficients[i]) >> 6;
-		sumR += (state.firRight[(state.firBufferIndex + i + 1) & 0x7] * state.firCoefficients[i]) >> 6;
+		sumLeft += (state.firLeft[(state.firBufferIndex + i + 1) & 0x7] * state.firCoefficients[i]) >> 6;
+		sumRight += (state.firRight[(state.firBufferIndex + i + 1) & 0x7] * state.firCoefficients[i]) >> 6;
 	}
+	sumLeft = clamp(sumLeft, short.min, short.max);
+	sumRight = clamp(sumRight, short.min, short.max);
 
-	leftSample = cast(short)(leftSample + ((sumL * state.echoVolumeLeft) >> 7));
-	rightSample = cast(short)(rightSample + ((sumR * state.echoVolumeRight) >> 7));
+	leftSample = cast(short)clamp(leftSample + ((sumLeft * state.echoVolumeLeft) / 128.0), short.min, short.max);
+	rightSample = cast(short)clamp(rightSample + ((sumRight * state.echoVolumeRight) / 128.0), short.min, short.max);
 
-	short inLeft = 0;
-	short inRight = 0;
+	int inLeft = 0;
+	int inRight = 0;
 	for(int i = 0; i < 8; i++) {
 		if(state.echoOn & (1 << i)) {
-			inLeft += (state.channels[i].interpolationBuffer[0] * state.channels[i].leftVolume) >> 6;
-			inRight += (state.channels[i].interpolationBuffer[0] * state.channels[i].rightVolume) >> 6;
+			inLeft += cast(short)((state.channels[i].lastSample * state.channels[i].leftVolume) / 128.0);
+			inRight += cast(short)((state.channels[i].lastSample * state.channels[i].rightVolume) / 128.0);
+			inLeft = clamp(inLeft, short.min, short.max);
+			inRight = clamp(inRight, short.min, short.max);
 		}
 	}
-	inLeft += (sumL * state.echoFeedbackVolume) >> 7;
-	inRight += (sumR * state.echoFeedbackVolume) >> 7;
+	inLeft += cast(int)((sumLeft * state.echoFeedbackVolume) / 128.0);
+	inRight += cast(int)((sumRight * state.echoFeedbackVolume) / 128.0);
+	inLeft = clamp(inLeft * 32000 / mixrate, short.min, short.max);
+	inRight = clamp(inRight * 32000 / mixrate, short.min, short.max);
 	inLeft &= 0xfffe;
 	inRight &= 0xfffe;
 	if(state.echoWrites) {
-		state.echoBuffer[echoAddress] = inLeft;
-		state.echoBuffer[echoAddress + 1] = inRight;
+		state.echoBuffer[echoAddress] = cast(short)inLeft;
+		state.echoBuffer[echoAddress + 1] = cast(short)inRight;
 	}
 
 	state.firBufferIndex = (state.firBufferIndex + 1) & 7;
@@ -324,7 +331,7 @@ struct NSPCPlayer {
 						interpolationSample = channel.interpolationBuffer[idx - 1];
 					}
 				}
-				int s1 = interpolate(interpolation, channel.interpolationBuffer[], channel.samplePosition >> 3);
+				int s1 = channel.lastSample = interpolate(interpolation, channel.interpolationBuffer[], channel.samplePosition >> 3);
 
 				if (channel.adsrRate && (++channel.adsrCounter >= cast(int)(adsrGainRates[channel.adsrRate] * (mixrate / 44100.0)))) {
 					doADSR(channel);
@@ -348,7 +355,7 @@ struct NSPCPlayer {
 					}
 				}
 			}
-			doEcho(state, sample[0], sample[1]);
+			doEcho(state, sample[0], sample[1], mixrate);
 		}
 		return buffer[0 .. length];
 	}
