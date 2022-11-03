@@ -2,6 +2,7 @@ import nspc;
 
 import std.algorithm.comparison;
 import std.conv;
+import std.digest : toHexString;
 import std.experimental.logger;
 import std.exception;
 import std.file;
@@ -93,13 +94,18 @@ int main(string[] args) {
 
 	nspc.setSpeed(speed);
 
-	if (outfile != "") {
+	if (!dumpBRRFiles && (outfile != "")) {
 		dumpWav(nspc, sampleRate, channels, outfile);
 	} else if (dumpBRRFiles) {
+		if (!outfile.exists) {
+			mkdirRecurse(outfile);
+		}
 		foreach(idx, sample; nspc.getSamples) {
-			const filename = format!"%s.%s.brr.wav"(args[1], idx);
-			dumpWav(sample.data, sampleRate, 1, filename);
-			writeln("Writing ", filename);
+			const filename = buildPath(outfile, format!"%s.brr.wav"(sample.hash.toHexString));
+			if (!filename.exists) {
+				dumpWav(sample.data, sampleRate, 1, filename);
+				writeln("Writing ", filename);
+			}
 		}
 	} else {
 		// Prepare to play music

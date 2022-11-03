@@ -111,6 +111,10 @@ struct Sample {
 	bool isValid() const @safe pure nothrow {
 		return data.length > 0;
 	}
+	ubyte[16] hash() const @safe pure nothrow {
+		import std.digest.md : md5Of;
+		return md5Of(data);
+	}
 }
 struct Instrument {
 	align(1):
