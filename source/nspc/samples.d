@@ -9,9 +9,6 @@ private enum brrFlagLoop = 2;
 
 Sample decodeSample(scope const ubyte[] buffer, ushort start, ushort loop) @safe {
 	Sample sample;
-	//for (uint sn = 0; sn < 128; sn++) {
-	//	const start = ptrtable[sn][0];
-	//	const loop = ptrtable[sn][1];
 
 	int length = sampleLength(buffer, start);
 	if (length == -1) {
@@ -66,14 +63,12 @@ Sample decodeSample(scope const ubyte[] buffer, ushort start, ushort loop) @safe
 			}
 		}
 
-		// In the vanilla game, the most iterations needed is 48 (for sample 0x17 in pack 5).
-		// Most samples need less than 10.
+		// TODO: Figure out maximum number
 		++times;
 	} while (needsAnotherLoop && times < 256);
 
 	assert(!needsAnotherLoop, "Sample took too many iterations to get into a cycle");
 	return sample;
-	//}
 }
 
 void decodeBRRBlock(scope short[] buffer, short[2] lastSamples, const scope ubyte[] block) nothrow @safe {
