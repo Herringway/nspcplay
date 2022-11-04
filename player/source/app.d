@@ -1,6 +1,7 @@
 import nspc;
 
 import std.algorithm.comparison;
+import std.algorithm.searching;
 import std.conv;
 import std.digest : toHexString;
 import std.experimental.logger;
@@ -9,6 +10,7 @@ import std.file;
 import std.format;
 import std.getopt;
 import std.path;
+import std.range;
 import std.stdio;
 import std.string;
 import std.utf;
@@ -55,6 +57,7 @@ int main(string[] args) {
 	int sampleRate = 44100;
 	ushort speed = NSPCPlayer.defaultSpeed;
 	string outfile;
+	string replaceSamples;
 	bool dumpBRRFiles;
 	Interpolation interpolation;
 	if (args.length < 2) {
@@ -66,6 +69,7 @@ int main(string[] args) {
 		"i|interpolation", "Sets interpolation (linear, gaussian, sinc, cubic)", &interpolation,
 		"b|brrdump", "Dumps BRR samples used", &dumpBRRFiles,
 		"o|outfile", "Dumps output to file", &outfile,
+		"r|replacesamples", "Replaces built-in samples with samples found in directory", &replaceSamples,
 		"v|verbose", "Print more verbose information", &verbose,
 		"s|speed", "Sets playback speed (500 is default)", &speed);
 	if (help.helpWanted) {
@@ -89,6 +93,33 @@ int main(string[] args) {
 	nspc.loadSong(loadNSPCFile(file));
 
 	nspc.interpolation = interpolation;
+	if (replaceSamples != "") {
+		foreach(idx, sample; nspc.getSamples) {
+			const glob = format!"%s.*.brr.wav"(sample.hash.toHexString);
+			auto matched = dirEntries(replaceSamples, glob, SpanMode.shallow);
+			if (!matched.empty) {
+				WAVFile header;
+				int newLoop;
+				if (auto loopSplit1 = matched.front.name.findSplit(".")) {
+					if (auto loopSplit2 = loopSplit1[2].findSplit(".")) {
+						newLoop = loopSplit2[0].to!int;
+					}
+				}
+
+				auto newSample = readWav(matched.front.name, header);
+				if (header.channels == 2) {
+					const old = newSample;
+					newSample = newSample[0 .. $ / 2];
+					foreach (sampleIndex, chanSamples; old.chunks(2).enumerate) {
+						newSample[sampleIndex] = cast(short)((chanSamples[0] + chanSamples[1]) / 2);
+					}
+				}
+				assert(header.bitsPerSample == 16, "Sample must be 16-bit!");
+				infof("Replacing sample with %s", matched.front.name);
+				nspc.replaceSample(idx, newSample, newLoop);
+			}
+		}
+	}
 	nspc.play();
 	trace("Playing NSPC music");
 
@@ -101,7 +132,7 @@ int main(string[] args) {
 			mkdirRecurse(outfile);
 		}
 		foreach(idx, sample; nspc.getSamples) {
-			const filename = buildPath(outfile, format!"%s.brr.wav"(sample.hash.toHexString));
+			const filename = buildPath(outfile, format!"%s.%s.brr.wav"(sample.hash.toHexString, sample.loopLength));
 			if (!filename.exists) {
 				dumpWav(sample.data, sampleRate, 1, filename);
 				writeln("Writing ", filename);
@@ -166,4 +197,11 @@ void dumpWav(T)(T[] samples, uint sampleRate, ushort channels, string filename) 
 	header.recalcSizes(samples.length);
 	file.rawWrite([header]);
 	file.rawWrite(samples);
+}
+
+short[] readWav(const string filename, out WAVFile header) {
+	auto file = cast(const(ubyte)[])read(filename);
+	header = (cast(const(WAVFile)[])(file[0 .. WAVFile.sizeof]))[0];
+	assert((header.riffSignature == "RIFF") && (header.wavSignature == "WAVE"), "Invalid WAV file!");
+	return cast(short[])(file[WAVFile.sizeof .. WAVFile.sizeof + header.dataSize]);
 }
