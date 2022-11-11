@@ -7,6 +7,7 @@ enum Variant : uint {
 
 enum Interpolation {
 	gaussian,
+	none,
 	linear,
 	cubic,
 	sinc,

@@ -157,6 +157,8 @@ private int getFullLoopLength(const Sample sa, const short[2] nextBlock, int fir
 
 short interpolate(Interpolation style, scope const short[] buf, int position) nothrow @safe pure {
 	final switch (style) {
+		case Interpolation.none:
+			return buf[0];
 		case Interpolation.gaussian:
 			return gaussianInterpolation(buf[0 .. 4], (position >> 4) & 0xFF);
 		case Interpolation.cubic:
