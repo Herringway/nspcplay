@@ -113,6 +113,9 @@ int main(string[] args) {
 					foreach (sampleIndex, chanSamples; old.chunks(2).enumerate) {
 						newSample[sampleIndex] = cast(short)((chanSamples[0] + chanSamples[1]) / 2);
 					}
+				} else if (header.channels == 1) {
+				} else {
+					assert(0, "Sample must be mono or stereo!");
 				}
 				assert(header.bitsPerSample == 16, "Sample must be 16-bit!");
 				infof("Replacing sample with %s", matched.front.name);
