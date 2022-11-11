@@ -16,6 +16,9 @@ import std.string;
 import std.utf;
 import bindbc.sdl : SDL_AudioCallback, SDL_AudioDeviceID;
 
+extern(C) int kbhit();
+extern(C) int getch();
+
 bool initAudio(SDL_AudioCallback fun, ubyte channels, uint sampleRate, void* userdata = null) {
 	SDL_AudioDeviceID dev;
 	import bindbc.sdl;
@@ -150,7 +153,15 @@ int main(string[] args) {
 
 
 		writeln("Press enter to exit");
-		readln();
+		while(true) {
+			if (kbhit()) {
+				getch(); //make sure the key press is actually consumed
+				break;
+			}
+			if (!nspc.isPlaying) {
+				break;
+			}
+		}
 	}
 	nspc.stop();
 
