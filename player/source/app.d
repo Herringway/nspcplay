@@ -61,6 +61,7 @@ int main(string[] args) {
 	ushort speed = NSPCPlayer.defaultSpeed;
 	string outfile;
 	string replaceSamples;
+	bool printSong;
 	bool dumpBRRFiles;
 	Interpolation interpolation;
 	if (args.length < 2) {
@@ -71,6 +72,7 @@ int main(string[] args) {
 		"f|samplerate", "Sets sample rate (Hz)", &sampleRate,
 		"i|interpolation", "Sets interpolation (linear, gaussian, sinc, cubic)", &interpolation,
 		"b|brrdump", "Dumps BRR samples used", &dumpBRRFiles,
+		"p|print", "Print song in a vaguely human-readable format", &printSong,
 		"o|outfile", "Dumps output to file", &outfile,
 		"r|replacesamples", "Replaces built-in samples with samples found in directory", &replaceSamples,
 		"v|verbose", "Print more verbose information", &verbose,
@@ -93,7 +95,8 @@ int main(string[] args) {
 
 	trace("Loading NSPC file");
 	// Load files
-	nspc.loadSong(loadNSPCFile(file));
+	auto song = loadNSPCFile(file);
+	nspc.loadSong(song);
 
 	nspc.interpolation = interpolation;
 	if (replaceSamples != "") {
@@ -133,6 +136,8 @@ int main(string[] args) {
 
 	if (!dumpBRRFiles && (outfile != "")) {
 		dumpWav(nspc, sampleRate, channels, outfile);
+	} else if (printSong) {
+		writeln(song);
 	} else if (dumpBRRFiles) {
 		if (!outfile.exists) {
 			mkdirRecurse(outfile);

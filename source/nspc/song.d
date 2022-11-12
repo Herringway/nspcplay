@@ -212,6 +212,41 @@ struct Song {
 		}
 		return id;
 	}
+	void toString(S)(ref S sink) const {
+		import std.format : formattedWrite;
+		import std.range : put;
+		void printSequence(const(ubyte)[] data) {
+			bool done;
+			while((data.length > 0) && (!done)) {
+				size_t nextOffset;
+				const command = readCommand(variant, data, nextOffset);
+				sink.formattedWrite!"%x\n"(command);
+				if (command.type == VCMDClass.terminator) {
+					done = true;
+				}
+				data = data[nextOffset .. $];
+			}
+		}
+		sink.formattedWrite!"Phrases: %s\n"(order);
+		foreach (id, patternData; pattern) {
+			sink.formattedWrite!"Pattern %s\n"(id);
+			foreach (trackID, track; patternData) {
+				put(sink, "----------\n");
+				sink.formattedWrite!"Track %s\n"(trackID);
+				printSequence(track.track);
+			}
+		}
+		foreach (subroutineID, subroutine; subroutines) {
+			put(sink, "----------\n");
+			sink.formattedWrite!"Subroutine %04X\n"(subroutineID);
+			printSequence(subroutine.track);
+		}
+	}
+	private void _tmp() const {
+		import std.range : nullSink;
+		auto n = nullSink;
+		toString(n);
+	}
 }
 private struct PrototypeInstrument {
 	align(1):

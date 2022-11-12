@@ -1,6 +1,7 @@
 module nspc.sequence;
 
 import std.experimental.logger;
+import std.format : FormatSpec;
 
 import nspc.common;
 
@@ -210,6 +211,7 @@ struct Command {
 	VCMDClass type;
 	VCMD special;
 	const(ubyte)[] parameters;
+	private const(ubyte)[] raw;
 	/// returns byte 0, minus the beginning of whatever class of command
 	ubyte relative() const @safe pure nothrow scope {
 		return cast(ubyte)(_cmd - _cmdBase);
@@ -223,11 +225,14 @@ struct Command {
 	private void _tmp() const {
 		import std.range : nullSink;
 		auto n = nullSink;
-		toString(n);
+		toString(n, *(new FormatSpec!char()));
 	}
-	void toString(S)(ref S sink) const @safe {
+	void toString(S, C)(ref S sink, scope const ref FormatSpec!C fmt) const @safe {
 		import std.format : formattedWrite;
 		import std.range : put;
+		if (fmt.spec == 'x') {
+			sink.formattedWrite!"[%(%02X %)] "(raw);
+		}
 		const commandClass = type;
 		final switch (commandClass) {
 			case VCMDClass.terminator:
@@ -370,6 +375,7 @@ Command readCommand(Variant variant, return scope const(ubyte)[] p, out size_t r
 		readBytes += codeLength[command.special];
 	}
 	command.parameters = p[1 .. readBytes];
+	command.raw = p[0 .. readBytes];
 	//debug tracef("Read command: %s", command);
 	return command;
 }
