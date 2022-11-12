@@ -1,9 +1,9 @@
-module nspc.player;
+module nspcplay.player;
 
-import nspc.common;
-import nspc.song;
-import nspc.sequence;
-import nspc.samples;
+import nspcplay.common;
+import nspcplay.song;
+import nspcplay.sequence;
+import nspcplay.samples;
 
 import std.algorithm.comparison;
 import std.exception;

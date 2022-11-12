@@ -1,6 +1,6 @@
 import std;
 import std.experimental.logger;
-import nspc;
+import nspcplay;
 
 enum Mode {
 	undefined,

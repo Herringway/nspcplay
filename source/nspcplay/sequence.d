@@ -1,9 +1,9 @@
-module nspc.sequence;
+module nspcplay.sequence;
 
 import std.experimental.logger;
 import std.format : FormatSpec;
 
-import nspc.common;
+import nspcplay.common;
 
 enum VCMDClass {
 	terminator,

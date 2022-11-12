@@ -1,4 +1,4 @@
-import nspc;
+import nspcplay;
 
 import std.algorithm.comparison;
 import std.algorithm.searching;

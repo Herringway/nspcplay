@@ -1,5 +1,5 @@
-module nspc.c;
-import nspc;
+module nspcplay.c;
+import nspcplay;
 import std.experimental.allocator;
 import std.string;
 import core.sys.windows.windows;

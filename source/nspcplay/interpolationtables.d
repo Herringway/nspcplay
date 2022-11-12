@@ -1,4 +1,4 @@
-module nspc.interpolationtables;
+module nspcplay.interpolationtables;
 
 
 immutable short[512] gauss = [

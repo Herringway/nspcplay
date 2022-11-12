@@ -1,4 +1,4 @@
-module nspc.song;
+module nspcplay.song;
 
 import std.algorithm.comparison : max, min;
 import std.algorithm.sorting : sort;
@@ -7,9 +7,9 @@ import std.exception : enforce;
 import std.experimental.logger;
 import std.format : format;
 
-import nspc.common;
-import nspc.samples;
-import nspc.sequence;
+import nspcplay.common;
+import nspcplay.samples;
+import nspcplay.sequence;
 
 private enum maxInstruments = 64;
 private enum maxSampleCount = 128;
@@ -498,7 +498,7 @@ private void processInstruments(ref Song song, scope const ubyte[] buffer, const
 	}
 }
 private void decodeSamples(ref Song song, scope const ubyte[] buffer, const scope ushort[2][] ptrtable) nothrow @safe {
-	for (uint sn = 0; sn < 128; sn++) {
+	for (uint sn = 0; sn < 64; sn++) {
 		const start = ptrtable[sn][0];
 		const loop = ptrtable[sn][1];
 		if (start == 0 || start == 0xffff) {

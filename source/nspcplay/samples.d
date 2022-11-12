@@ -1,7 +1,7 @@
-module nspc.samples;
+module nspcplay.samples;
 
-import nspc.common;
-import nspc.interpolationtables;
+import nspcplay.common;
+import nspcplay.interpolationtables;
 import std.exception;
 
 private enum brrBlockSize = 9;
@@ -38,7 +38,7 @@ Sample decodeSample(scope const ubyte[] buffer, ushort start, ushort loop) @safe
 	do {
 		needsAnotherLoop = false;
 		for (int pos = decodingStart; pos < end; pos += brrBlockSize) {
-			enforce((idx + 1) * 16 <= p.length, "Invalid sample");
+			enforce!NSPCException((idx + 1) * 16 <= p.length, "Invalid sample");
 			decodeBRRBlock(p[idx * 16 .. (idx + 1) * 16], pExtra, buffer[pos .. pos + brrBlockSize]);
 			pExtra[] = p[idx * 16 + 14 .. idx * 16 + 16];
 			idx++;

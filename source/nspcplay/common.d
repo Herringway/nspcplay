@@ -1,4 +1,4 @@
-module nspc.common;
+module nspcplay.common;
 
 enum Variant : uint {
 	standard = 0,

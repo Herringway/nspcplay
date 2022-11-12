@@ -1,7 +1,7 @@
 import std;
 import std.experimental.logger;
 
-import nspc;
+import nspcplay;
 
 immutable ushort[] packTerminator = [0];
 
