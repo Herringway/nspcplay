@@ -10,7 +10,7 @@ import std.exception;
 import std.experimental.logger;
 import std.format;
 
-enum nativeSamplingRate = 32000;
+enum uint nativeSamplingRate = 32000;
 
 private struct SongState {
 	ChannelState[8] channels;
