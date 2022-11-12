@@ -228,7 +228,7 @@ struct Song {
 		}
 		sink.formattedWrite!"Phrases: %s\n"(order);
 		foreach (id, patternData; pattern) {
-			sink.formattedWrite!"Pattern %s\n"(id);
+			sink.formattedWrite!"Pattern %04X\n"(id);
 			foreach (trackID, track; patternData) {
 				put(sink, "----------\n");
 				sink.formattedWrite!"Track %s\n"(trackID);
