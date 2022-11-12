@@ -67,7 +67,7 @@ enum ADSRPhase {
 }
 
 private struct ChannelState {
-	bool enabled;
+	bool enabled = true;
 	int next; // time left in note
 
 	Slider note;
