@@ -119,7 +119,7 @@ VCMDClass getCommandClass(Variant variant, ubyte val, out ubyte base) nothrow @s
 		} else if (val == 0xC7) {
 			return VCMDClass.rest;
 		} else if (val < 0xDA) {
-			base = 0xC8;
+			base = 0xD0;
 			return VCMDClass.percussion;
 		} else  {
 			base = 0xDA;

@@ -910,6 +910,7 @@ struct NSPCPlayer {
 		}
 		currentSong = song;
 		state = state.init;
+		state.percussionBase = cast(ubyte)song.percussionBase;
 	}
 	/// Sets the playback speed. Default value is NSPCPlayer.defaultSpeed.
 	public void setSpeed(ushort rate) @safe nothrow {
