@@ -58,12 +58,11 @@ struct Phrase {
 	PhraseType type;
 	ushort id;
 	ushort jumpTimes;
-	bool unallocated;
 	void toString(S)(ref S sink) const {
 		import std.format : formattedWrite;
 		final switch (type) {
 			case PhraseType.pattern:
-				sink.formattedWrite!"Play pattern %s"(id);
+				sink.formattedWrite!"Play pattern %04X"(id);
 				break;
 			case PhraseType.jumpLimited:
 				sink.formattedWrite!"Jump to phrase %s %s times"(id, jumpTimes);
@@ -88,7 +87,7 @@ struct Song {
 	ushort address;
 	ubyte changed;
 	Phrase[] order;
-	Track[8][] pattern;
+	Track[8][ushort] pattern;
 	Track[ushort] subroutines;
 	const(ubyte[8])[] firCoefficients;
 	ubyte[8] releaseTable;
@@ -131,10 +130,10 @@ struct Song {
 		processInstruments(this, buffer, fakeHeader);
 	}
 	private void validatePhrases() @safe {
+		import std.algorithm.comparison : among;
 		bool endFound;
 		foreach (phrase; order) {
 			enforce!NSPCException(!endFound, "Phrases found after end of song");
-			enforce!NSPCException(!phrase.unallocated, "Unallocated phrase found");
 			final switch (phrase.type) {
 				case PhraseType.end:
 					endFound = true;
@@ -151,14 +150,14 @@ struct Song {
 			}
 		}
 		enforce!NSPCException(order.length > 0, "No phrases loaded");
-		enforce!NSPCException(order[$ - 1].type == PhraseType.end, "Phrase list must have an end phrase");
+		enforce!NSPCException(order[$ - 1].type.among(PhraseType.end, PhraseType.jump), "Phrase list must have an end phrase");
 	}
 	private void validateInstrument(size_t id) @safe {
 		enforce!NSPCException(id < instruments.length, format!"Invalid instrument %s - Index out of bounds"(id));
 		const idata = instruments[id];
 		enforce!NSPCException(samples[idata.sampleID].isValid, format!"Invalid instrument %s - Invalid sample %s"(id, idata.sampleID));
 		if (idata.tuning == 0) {
-			infof("Suspicious instrument %s - no tuning (will be silent)", id);
+			tracef("Suspicious instrument %s - no tuning (will be silent)", id);
 		}
 	}
 	private void validateTrack(scope const ubyte[] track, bool isSub, ref ubyte tmpPercussionBase) @safe {
@@ -331,7 +330,6 @@ Song loadNSPCFile(const(ubyte)[] data) @safe {
 }
 private void decompileSong(scope ubyte[] data, ref Song song, int startAddress, int endAddress) @safe {
 	immutable copyData = data.idup;
-	int patterns;
 	song.address = cast(ushort) startAddress;
 	song.changed = false;
 
@@ -340,18 +338,18 @@ private void decompileSong(scope ubyte[] data, ref Song song, int startAddress, 
 	const ushort[] wpO = cast(ushort[]) data[startAddress .. $ -  ($ - startAddress) % 2];
 	uint index;
 	uint phraseCount;
-	bool skipNextShort;
+	bool nextEnds;
 	while (wpO[index] != 0) {
-		if (wpO[index] < 0x80) {
-			skipNextShort = true;
-		} else if ((wpO[index] > 0x81) && (wpO[index] < 0x100)) {
-			skipNextShort = true;
+		if (wpO[index] < 0x100) {
+			if (wpO[index] >= 0x80) {
+				nextEnds = true;
+			}
+			index++;
 		}
-		if (!skipNextShort) {
-			phraseCount++;
-		} else {
-			skipNextShort = false;
+		if (nextEnds) {
+			break;
 		}
+		phraseCount++;
 		index++;
 	}
 	ushort phraseID(ushort address) {
@@ -384,7 +382,6 @@ private void decompileSong(scope ubyte[] data, ref Song song, int startAddress, 
 	const phrases = wpO[0 .. index];
 	// Now the number of patterns is known, so go back and get the order
 	size_t idx;
-	ushort[] extraPatterns;
 	foreach (ref order; song.order) {
 		if (phrases[idx] == 0) {
 			order.type = PhraseType.end;
@@ -403,64 +400,36 @@ private void decompileSong(scope ubyte[] data, ref Song song, int startAddress, 
 			order.id = phraseID(phrases[idx]);
 		} else {
 			order.type = PhraseType.pattern;
-			if (phrases[idx] >= firstPattern) {
-				int pat = phrases[idx] - firstPattern;
-				order.id = cast(ushort)(pat >> 4);
-				patterns = max((pat >> 4) + 1, patterns);
-			} else {
-				if (!extraPatterns.canFind(phrases[idx])) {
-					debug(nspclogging) tracef("Allocating new phrase: %04X", phrases[idx]);
-					extraPatterns ~= phrases[idx];
-				}
-				order.id = phrases[idx];
-				order.unallocated = true;
-			}
+			order.id = phrases[idx];
 		}
 		idx++;
-	}
-	sort(extraPatterns);
-	foreach (newPatternID, extraPattern; extraPatterns) {
-		foreach (ref phrase; song.order) {
-			if (phrase.id == extraPattern) {
-				assert(phrase.unallocated);
-				debug infof("%s, %s", patterns, newPatternID);
-				phrase.id = cast(ushort)(patterns + newPatternID);
-				phrase.unallocated = false;
-			}
-		}
-		patterns++;
 	}
 
 	debug(nspclogging) tracef("Phrases: %(%s, %)", song.order);
 	song.validatePhrases();
 
-	song.pattern = new Track[8][](patterns);
+	song.pattern = null;
 	song.subroutines = null;
 
 	index = fpIndex;
 	ushort[] subTable;
 	ubyte tmpPercussionBase;
-	for (int trk = 0; trk < song.pattern.length * 8; trk++) {
-		Track* t = &song.pattern[trk / 8][trk % 8];
-		ushort start = wpO[index++];
-		if (start == 0) {
+	foreach (phrase; song.order) {
+		if (phrase.type != PhraseType.pattern) {
 			continue;
 		}
-		// Go through track list (patterns) and find first track that has an address higher than us.
-		// If we find a track after us, we'll assume that this track doesn't overlap with that one.
-		// If we don't find one, then next will remain at 0x10000 and we will search until the
-		// end of memory to find a 00 byte to terminate the track.
-		uint next = 0x10000; // offset of following track
-		if (start < startAddress) {
-			next = startAddress;
-		}
-		for (int trackIndex = 0; trackIndex < (song.pattern.length * 8); trackIndex += 1) {
-			int trackAddress = wpO[fpIndex + trackIndex];
-			if (trackAddress < next && trackAddress > start) {
-				next = trackAddress;
+		song.pattern.require(phrase.id, () {
+			Track[8] tracks;
+			const trackAddresses = (cast(const(ushort[8])[])(data[phrase.id .. phrase.id + 8 * ushort.sizeof]))[0];
+			foreach (idx, trackAddress; trackAddresses) {
+				if (trackAddress == 0) {
+					continue;
+				}
+				debug(nspclogging) tracef("Decompiling track at %04X", trackAddress);
+				decompileTrack(copyData, trackAddresses[idx], 0x10000, tracks[idx], song, subTable, tmpPercussionBase);
 			}
-		}
-		decompileTrack(copyData, start, next, *t, song, subTable, tmpPercussionBase);
+			return tracks;
+		}());
 	}
 }
 private void decompileTrack(immutable(ubyte)[] data, ushort start, uint next, ref Track t, ref Song song, ref ushort[] subTable, ref ubyte tmpPercussionBase) @safe {
