@@ -179,7 +179,7 @@ struct Song {
 					validateInstrument(absoluteInstrumentID(command.instrument, tmpPercussionBase, true));
 					break;
 				case VCMDClass.special:
-					enforce!NSPCException(command.special != VCMD.invalid, format!"Invalid code command %s"(command));
+					enforce!NSPCException(command.special != VCMD.invalid, format!"Invalid code command %02X"(command.relative));
 
 					if (command.special == VCMD.instrument) {
 						validateInstrument(absoluteInstrumentID(command.parameters[0], tmpPercussionBase, false));
