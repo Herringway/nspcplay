@@ -8,7 +8,7 @@ NSPCPlay is an implementation of the NSPC engine used and extended by many Super
 
 ### As a Dependency
 
-Simply use `dub add nspcplay` in a D project. C compatible functions and header are not yet available.
+Simply use `dub add nspcplay` in a D project.
 
 ### Standalone Player
 
@@ -24,8 +24,12 @@ struct NSPC {
 	ushort songAddress; // Base SPC address of the song's sequence data
 	ushort instrumentAddress; // Base SPC address of the instruments
 	ushort sampleAddress; // Base SPC address of the samples
-	ubyte[22] reserved; // Currently unused
-	// NSPC packs follow...
+	ubyte releaseTable; // Release table to use
+	ubyte volumeTable; // Volume table to use
+	ubyte[19] reserved; // Currently unused
+	ubyte firCoefficientTableCount; // Number of FIR coefficient tables in this file
+	// NSPC packs here...
+	ubyte[8][0] firCoefficientTables; // length determined by firCoefficientTableCount
 }
 
 struct NSPCPack {
@@ -41,6 +45,10 @@ struct NSPCPack {
 ### 0 - Earthbound
 
 Used in Earthbound. Compatible with many other variants.
+
+### 1 - Prototype
+
+Used in Super Mario World and Pilotwings.
 
 ## Credits
 
