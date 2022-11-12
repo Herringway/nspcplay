@@ -1,6 +1,6 @@
 {
 	"description": "NSPC player.",
-	"license": "proprietary",
+	"license": "BSL-1.0",
 	"name": "nspcplay",
 	"subPackages": [
 		"player",
