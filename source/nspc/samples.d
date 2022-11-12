@@ -2,6 +2,7 @@ module nspc.samples;
 
 import nspc.common;
 import nspc.interpolationtables;
+import std.exception;
 
 private enum brrBlockSize = 9;
 private enum brrFlagEnd = 1;
@@ -31,13 +32,13 @@ Sample decodeSample(scope const ubyte[] buffer, ushort start, ushort loop) @safe
 
 	bool needsAnotherLoop;
 	int decodingStart = start;
-	int times = 0;
 
 	short[2] pExtra;
 	size_t idx;
 	do {
 		needsAnotherLoop = false;
 		for (int pos = decodingStart; pos < end; pos += brrBlockSize) {
+			enforce((idx + 1) * 16 <= p.length, "Invalid sample");
 			decodeBRRBlock(p[idx * 16 .. (idx + 1) * 16], pExtra, buffer[pos .. pos + brrBlockSize]);
 			pExtra[] = p[idx * 16 + 14 .. idx * 16 + 16];
 			idx++;
@@ -62,12 +63,7 @@ Sample decodeSample(scope const ubyte[] buffer, ushort start, ushort loop) @safe
 				// needsAnotherLoop is already false
 			}
 		}
-
-		// TODO: Figure out maximum number
-		++times;
-	} while (needsAnotherLoop && times < 256);
-
-	assert(!needsAnotherLoop, "Sample took too many iterations to get into a cycle");
+	} while (needsAnotherLoop);
 	return sample;
 }
 

@@ -318,10 +318,6 @@ struct NSPCPlayer {
 
 				int ipos = channel.samplePosition >> 15;
 
-				if (ipos >= channel.sample.data.length) {
-					assert(0, format!"Sample position exceeds sample length! %d > %d"(ipos, channel.sample.data.length));
-				}
-
 				foreach (idx, ref interpolationSample; channel.interpolationBuffer) {
 					size_t offset = ipos + idx;
 					while (channel.sample.loopLength && (offset >= channel.sample.data.length)) {
@@ -395,14 +391,7 @@ struct NSPCPlayer {
 	}
 
 	private void setInstrument(ref SongState st, ref ChannelState c, size_t instrument) nothrow @safe {
-		if (instrument >= currentSong.instruments.length) {
-			assert(0, format!"instrument %s out of bounds!"(instrument));
-		}
 		const idata = currentSong.instruments[instrument];
-		if (!currentSong.samples[idata.sampleID].data) {
-			assert(0, format!"no data for instrument %s"(instrument));
-		}
-
 		c.instrument = cast(ubyte) instrument;
 		c.instrumentADSRGain = idata.adsrGain;
 		if (idata.adsrGain.mode == ADSRGainMode.directGain) {
