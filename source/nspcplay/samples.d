@@ -173,6 +173,14 @@ short linearInterpolation(short[2] latest, ushort val) nothrow @safe pure {
 	return cast(short)result;
 }
 
+@safe pure unittest {
+	assert(linearInterpolation([0, 0], 0) == 0);
+	assert(linearInterpolation([0, 0], 4096) == 0);
+	assert(linearInterpolation([0x7000, 0], 4096) == 0);
+	assert(linearInterpolation([0x7000, 0], 0) == 0x7000);
+	assert(linearInterpolation([0x7000, 0], 2048) == 0x3800);
+}
+
 short gaussianInterpolation(short[4] latest, ubyte index) nothrow @safe pure {
 	const(short)[] fwd = gauss[255 - index .. 512 - index];
 	const(short)[] rev = gauss[index .. index + 257]; // mirror left half of gaussian
@@ -191,7 +199,7 @@ short gaussianInterpolation(short[4] latest, ubyte index) nothrow @safe pure {
 	return cast(short)result;
 }
 
-unittest {
+@safe pure unittest {
 	assert(gaussianInterpolation([0, 0, 0, 0], 0) == 0);
 	assert(gaussianInterpolation([0, 0, 0x100, 0x600], 0x55) == 0x6E);
 	assert(gaussianInterpolation([0, 0x100, 0x600, 0x400], 0) == 0x1BA);
@@ -214,6 +222,11 @@ short cubicInterpolation(short[4] latest, ubyte index) nothrow @safe pure {
 	return cast(short)result;
 }
 
+@safe pure unittest {
+	assert(cubicInterpolation([0, 0, 0, 0], 0) == 0);
+	assert(cubicInterpolation([10, 100, 1000, 10000], 120) == -3);
+}
+
 short sincInterpolation(short[8] latest, ushort index) nothrow @safe pure {
 	const(short)[] selection = sinc[index .. index + 8];
 
@@ -232,4 +245,9 @@ short sincInterpolation(short[8] latest, ushort index) nothrow @safe pure {
 		result = (result >> 31) ^ 0x7FFF;
 	}
 	return cast(short)result;
+}
+
+@safe pure unittest {
+	assert(sincInterpolation([0, 0, 0, 0, 0, 0, 0, 0], 0) == 0);
+	assert(sincInterpolation([1, 2, 3, 4, 5, 6, 7, 8], 9) == 3);
 }
