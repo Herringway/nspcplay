@@ -10,6 +10,8 @@ import std.exception;
 import std.experimental.logger;
 import std.format;
 
+enum nativeSamplingRate = 32000;
+
 private struct SongState {
 	ChannelState[8] channels;
 	byte transpose;
@@ -257,8 +259,8 @@ void doEcho(ref SongState state, ref short leftSample, ref short rightSample, in
 	}
 	inLeft += cast(int)((sumLeft * state.echoFeedbackVolume) / 128.0);
 	inRight += cast(int)((sumRight * state.echoFeedbackVolume) / 128.0);
-	inLeft = clamp(inLeft * 32000 / mixrate, short.min, short.max);
-	inRight = clamp(inRight * 32000 / mixrate, short.min, short.max);
+	inLeft = clamp(inLeft * nativeSamplingRate / mixrate, short.min, short.max);
+	inRight = clamp(inRight * nativeSamplingRate / mixrate, short.min, short.max);
 	inLeft &= 0xfffe;
 	inRight &= 0xfffe;
 	if(state.echoWrites) {
@@ -280,7 +282,7 @@ struct NSPCPlayer {
 
 	package Song currentSong;
 	private SongState state;
-	private int mixrate = 44100;
+	private int mixrate = nativeSamplingRate;
 	private ubyte channelsEnabled = 0b11111111;
 	private int timerSpeed = defaultSpeed;
 	private bool songPlaying;
@@ -333,7 +335,7 @@ struct NSPCPlayer {
 				}
 				int s1 = channel.lastSample = interpolate(interpolation, channel.interpolationBuffer[], channel.samplePosition >> 3);
 
-				if (channel.adsrRate && (++channel.adsrCounter >= cast(int)(adsrGainRates[channel.adsrRate] * (mixrate / 44100.0)))) {
+				if (channel.adsrRate && (++channel.adsrCounter >= cast(int)(adsrGainRates[channel.adsrRate] * (mixrate / cast(double)nativeSamplingRate)))) {
 					doADSR(channel);
 					channel.adsrCounter = 0;
 				}
@@ -436,7 +438,7 @@ struct NSPCPlayer {
 		freq >>= 8;
 		freq &= 0x3fff;
 
-		c.noteFrequency = (freq * (32000U << (15 - 12))) / mixrate;
+		c.noteFrequency = (freq * (nativeSamplingRate << (15 - 12))) / mixrate;
 	}
 
 	private int calcVibratoDisp(ref ChannelState c, int phase) nothrow @safe {
