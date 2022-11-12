@@ -16,7 +16,7 @@ private struct SongState {
 	ChannelState[8] channels;
 	byte transpose;
 	Slider volume = Slider(0xC000);
-	Slider tempo = Slider(0x2000);
+	Slider tempo;
 	int nextTimerTick;
 	int cycleTimer = 255;
 	ubyte percussionBase; // set with FA
@@ -883,6 +883,7 @@ struct NSPCPlayer {
 			channel.parser.variant = currentSong.variant;
 			channel.parser.subroutines = currentSong.subroutines;
 		}
+		state.tempo.current = currentSong.defaultTempo << 8;
 	}
 	void initialize(int sampleRate) nothrow @safe {
 		initialize();

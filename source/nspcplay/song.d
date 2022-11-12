@@ -211,6 +211,12 @@ struct Song {
 		}
 		return id;
 	}
+	package ubyte defaultTempo() const @safe pure nothrow {
+		if (variant == Variant.prototype) {
+			return 0x36;
+		}
+		return 0x20;
+	}
 	void toString(S)(ref S sink) const {
 		import std.format : formattedWrite;
 		import std.range : put;
