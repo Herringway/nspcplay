@@ -870,9 +870,10 @@ struct NSPCPlayer {
 	}
 
 	/// Initialize or reset the player state
-	void initialize(int sampleRate) nothrow @safe {
+	void initialize() nothrow @safe {
 		state = state.init;
 
+		state.percussionBase = cast(ubyte)currentSong.percussionBase;
 		if (currentSong.order.length) {
 			loadPattern();
 		} else {
@@ -882,6 +883,9 @@ struct NSPCPlayer {
 			channel.parser.variant = currentSong.variant;
 			channel.parser.subroutines = currentSong.subroutines;
 		}
+	}
+	void initialize(int sampleRate) nothrow @safe {
+		initialize();
 		mixrate = sampleRate;
 	}
 
@@ -898,8 +902,7 @@ struct NSPCPlayer {
 			stop();
 		}
 		currentSong = song;
-		state = state.init;
-		state.percussionBase = cast(ubyte)song.percussionBase;
+		initialize();
 	}
 	/// Sets the playback speed. Default value is NSPCPlayer.defaultSpeed.
 	public void setSpeed(ushort rate) @safe nothrow {
