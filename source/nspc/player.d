@@ -67,6 +67,7 @@ enum ADSRPhase {
 }
 
 private struct ChannelState {
+	bool enabled;
 	int next; // time left in note
 
 	Slider note;
@@ -283,7 +284,6 @@ struct NSPCPlayer {
 	package Song currentSong;
 	private SongState state;
 	private int mixrate = nativeSamplingRate;
-	private ubyte channelsEnabled = 0b11111111;
 	private int timerSpeed = defaultSpeed;
 	private bool songPlaying;
 
@@ -308,7 +308,7 @@ struct NSPCPlayer {
 			}
 			length++;
 			foreach (i, ref channel; state.channels) {
-				if (!(channelsEnabled & (1 << i))) {
+				if (!channel.enabled) {
 					continue;
 				}
 
@@ -922,12 +922,7 @@ struct NSPCPlayer {
 	}
 	/// Enable or disable a song channel
 	public void setChannelEnabled(ubyte channel, bool enabled) @safe nothrow {
-		const newChannelsEnabled = 1 << channel;
-		if (enabled) {
-			channelsEnabled |= newChannelsEnabled;
-		} else {
-			channelsEnabled &= ~newChannelsEnabled;
-		}
+		state.channels[channel].enabled = enabled;
 	}
 	bool isPlaying() const pure @safe nothrow {
 		return songPlaying;

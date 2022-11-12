@@ -63,12 +63,14 @@ int main(string[] args) {
 	string replaceSamples;
 	bool printSong;
 	bool dumpBRRFiles;
+	string channelsEnabled = "11111111";
 	Interpolation interpolation;
 	if (args.length < 2) {
 		return 1;
 	}
 
 	auto help = getopt(args,
+		"c|channels", "Enables/disables channels", &channelsEnabled,
 		"f|samplerate", "Sets sample rate (Hz)", &sampleRate,
 		"i|interpolation", "Sets interpolation (linear, gaussian, sinc, cubic)", &interpolation,
 		"b|brrdump", "Dumps BRR samples used", &dumpBRRFiles,
@@ -131,6 +133,14 @@ int main(string[] args) {
 	}
 	nspc.play();
 	trace("Playing NSPC music");
+
+	if (channelsEnabled.length != 8) {
+		stderr.writeln("Channel string must be exactly 8 characters long!");
+		return 1;
+	}
+	foreach (idx, channel; channelsEnabled) {
+		nspc.setChannelEnabled(cast(ubyte)idx, channel != '0');
+	}
 
 	nspc.setSpeed(speed);
 
