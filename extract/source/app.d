@@ -160,6 +160,7 @@ void extractKSS(const scope ubyte[] data, string outDir) {
 }
 
 void extractSMW(const scope ubyte[] data, string outDir) {
+	enum firCoefficientsTable = 0x70DB1;
 	const progOffset = 0x70000;
 	const sfxOffset = 0x78000;
 	const seq1Offset = 0x718B1;
@@ -181,7 +182,7 @@ void extractSMW(const scope ubyte[] data, string outDir) {
 		result ~= cast(const(ubyte)[])packHeader ~ pack.data;
 		return result;
 	}
-	immutable ubyte[8][] firCoefficients = [[0xFF, 0x08, 0x17, 0x24, 0x24, 0x17, 0x08, 0xFF], [0x7F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]];
+	immutable ubyte[8][] firCoefficients = cast(const(ubyte[8])[])(data[firCoefficientsTable .. firCoefficientsTable + 2 * 8]);
 	foreach (bank, pack; chain(parsedProg, parsedSeq1, parsedSeq2, parsedSeq3).enumerate) {
 		if (pack.address == 0x1360) {
 			ushort currentOffset = tableBase;
