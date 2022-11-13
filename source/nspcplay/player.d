@@ -165,13 +165,13 @@ private struct Parser {
 		if (command.type == VCMDClass.terminator) {
 			done = subroutineCount == 0;
 			if (!done) {
-				sequenceData = --subroutineCount ? song.subroutines[subroutineStartAddress].track : subroutineReturnData;
+				sequenceData = --subroutineCount ? song.subroutines[subroutineStartAddress] : subroutineReturnData;
 			}
 		} else if ((command.type == VCMDClass.special) && (command.special == VCMD.subRoutine)) {
 			subroutineReturnData = sequenceData[nextOffset .. $];
 			subroutineStartAddress = read!ushort(command.parameters);
 			subroutineCount = command.parameters[2];
-			sequenceData = song.subroutines[subroutineStartAddress].track;
+			sequenceData = song.subroutines[subroutineStartAddress];
 		} else {
 			sequenceData = sequenceData[nextOffset .. $];
 		}
@@ -667,7 +667,7 @@ struct NSPCPlayer {
 				assert(0, "Not yet implemented");
 			case PhraseType.pattern:
 				foreach (idx, ref channel; state.channels) {
-					channel.parser.sequenceData = currentSong.pattern[nextPhrase.id][idx].track;
+					channel.parser.sequenceData = currentSong.pattern[nextPhrase.id][idx];
 					channel.parser.subroutineCount = 0;
 					channel.volume.cycles = 0;
 					channel.panning.cycles = 0;

@@ -49,11 +49,6 @@ struct NSPCFileHeader {
 	ubyte firCoefficientTableCount;
 }
 
-struct Track {
-	int size;
-	const(ubyte)[] track; // null for inactive track
-}
-
 struct Phrase {
 	PhraseType type;
 	ushort id;
@@ -87,8 +82,8 @@ struct Song {
 	ushort address;
 	ubyte changed;
 	Phrase[] order;
-	Track[8][ushort] pattern;
-	Track[ushort] subroutines;
+	const(ubyte)[][8][ushort] pattern;
+	const(ubyte)[][ushort] subroutines;
 	const(ubyte[8])[] firCoefficients;
 	ubyte[8] releaseTable;
 	ubyte[16] volumeTable;
@@ -238,13 +233,13 @@ struct Song {
 			foreach (trackID, track; patternData) {
 				put(sink, "----------\n");
 				sink.formattedWrite!"Track %s\n"(trackID);
-				printSequence(track.track);
+				printSequence(track);
 			}
 		}
 		foreach (subroutineID, subroutine; subroutines) {
 			put(sink, "----------\n");
 			sink.formattedWrite!"Subroutine %04X\n"(subroutineID);
-			printSequence(subroutine.track);
+			printSequence(subroutine);
 		}
 	}
 	private void _tmp() const {
@@ -425,7 +420,7 @@ private void decompileSong(scope ubyte[] data, ref Song song, int startAddress, 
 			continue;
 		}
 		song.pattern.require(phrase.id, () {
-			Track[8] tracks;
+			const(ubyte)[][8] tracks;
 			const trackAddresses = (cast(const(ushort[8])[])(data[phrase.id .. phrase.id + 8 * ushort.sizeof]))[0];
 			foreach (idx, trackAddress; trackAddresses) {
 				if (trackAddress == 0) {
@@ -438,7 +433,7 @@ private void decompileSong(scope ubyte[] data, ref Song song, int startAddress, 
 		}());
 	}
 }
-private void decompileTrack(immutable(ubyte)[] data, ushort start, uint next, ref Track t, ref Song song, ref ushort[] subTable, ref ubyte tmpPercussionBase) @safe {
+private void decompileTrack(immutable(ubyte)[] data, ushort start, uint next, ref const(ubyte)[] t, ref Song song, ref ushort[] subTable, ref ubyte tmpPercussionBase) @safe {
 	// Determine the end of the track.
 	const(ubyte)[] trackEnd = data[start .. $];
 	size_t length;
@@ -454,7 +449,7 @@ private void decompileTrack(immutable(ubyte)[] data, ushort start, uint next, re
 			ushort subPtr = read!ushort(command.parameters);
 
 			song.subroutines.require(subPtr, () {
-				Track st;
+				const(ubyte)[] st;
 				const(ubyte)[] subData = data[subPtr .. $];
 				size_t subLength;
 				size_t subTotalLength;
@@ -462,17 +457,15 @@ private void decompileTrack(immutable(ubyte)[] data, ushort start, uint next, re
 					subData = subData[subLength .. $];
 					subTotalLength += subLength;
 				}
-				st.size = cast(int)(subTotalLength + 1);
-				st.track = data[subPtr .. subPtr + subTotalLength + 1];
-				song.validateTrack(st.track, true, tmpPercussionBase);
+				st = data[subPtr .. subPtr + subTotalLength + 1];
+				song.validateTrack(st, true, tmpPercussionBase);
 				return st;
 			}());
 		}
 	}
-	t.size = cast(int)(totalLength);
-	t.track = data[start .. start + t.size];
+	t = data[start .. start + totalLength];
 
-	song.validateTrack(t.track, false, tmpPercussionBase);
+	song.validateTrack(t, false, tmpPercussionBase);
 }
 private void processInstruments(ref Song song, scope const ubyte[] buffer, const NSPCFileHeader header) @safe {
 	decodeSamples(song, buffer, cast(const(ushort[2])[])(buffer[header.sampleBase .. header.sampleBase + maxSampleCount * 4]));
