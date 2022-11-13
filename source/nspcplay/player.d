@@ -151,29 +151,27 @@ private struct Parser {
 	const(ubyte)[] sequenceData;
 	/// the sequence data that will be restored upon return from subroutine
 	const(ubyte)[] subroutineReturnData;
-	Track[ushort] subroutines;
 	/// Starting address of the subroutine
 	ushort subroutineStartAddress;
 	/// Number of times to repeat the subroutine
 	ubyte subroutineCount;
-	Variant variant;
-	Command popCommand() nothrow @safe {
+	Command popCommand(const Song song) nothrow @safe {
 		bool _;
-		return popCommand(_);
+		return popCommand(song, _);
 	}
-	Command popCommand(out bool done) nothrow @safe {
+	Command popCommand(const Song song, out bool done) nothrow @safe {
 		size_t nextOffset;
-		const command = readCommand(variant, sequenceData, nextOffset);
+		const command = readCommand(song.variant, sequenceData, nextOffset);
 		if (command.type == VCMDClass.terminator) {
 			done = subroutineCount == 0;
 			if (!done) {
-				sequenceData = --subroutineCount ? subroutines[subroutineStartAddress].track : subroutineReturnData;
+				sequenceData = --subroutineCount ? song.subroutines[subroutineStartAddress].track : subroutineReturnData;
 			}
 		} else if ((command.type == VCMDClass.special) && (command.special == VCMD.subRoutine)) {
 			subroutineReturnData = sequenceData[nextOffset .. $];
 			subroutineStartAddress = read!ushort(command.parameters);
 			subroutineCount = command.parameters[2];
-			sequenceData = subroutines[subroutineStartAddress].track;
+			sequenceData = song.subroutines[subroutineStartAddress].track;
 		} else {
 			sequenceData = sequenceData[nextOffset .. $];
 		}
@@ -611,7 +609,7 @@ struct NSPCPlayer {
 			auto p = c.parser;
 			bool done;
 			while (!done) {
-				const tmpCommand = p.popCommand(done);
+				const tmpCommand = p.popCommand(currentSong, done);
 				if (tmpCommand.type.among(VCMDClass.note, VCMDClass.tie, VCMDClass.rest, VCMDClass.percussion)) {
 					nextNote = tmpCommand.type;
 					break;
@@ -733,7 +731,7 @@ struct NSPCPlayer {
 			} else {
 				loop: while (1) {
 					bool done;
-					const command = channel.parser.popCommand(done);
+					const command = channel.parser.popCommand(currentSong, done);
 					final switch (command.type) {
 						case VCMDClass.terminator:
 							if (done) {
@@ -765,7 +763,7 @@ struct NSPCPlayer {
 				const command = readCommand(currentSong.variant, channel.parser.sequenceData, length);
 				if (command.special == VCMD.pitchSlideToNote) {
 					doCommand(st, channel, command);
-					channel.parser.popCommand();
+					channel.parser.popCommand(currentSong);
 				}
 			}
 		}
@@ -878,10 +876,6 @@ struct NSPCPlayer {
 			loadPattern();
 		} else {
 			songPlaying = false;
-		}
-		foreach (idx, ref channel; state.channels) {
-			channel.parser.variant = currentSong.variant;
-			channel.parser.subroutines = currentSong.subroutines;
 		}
 		state.tempo.current = currentSong.defaultTempo << 8;
 	}
