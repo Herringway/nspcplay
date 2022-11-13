@@ -498,16 +498,16 @@ private void processInstruments(ref Song song, scope const ubyte[] buffer, const
 	}
 }
 private void decodeSamples(ref Song song, scope const ubyte[] buffer, const scope ushort[2][] ptrtable) nothrow @safe {
-	for (uint sn = 0; sn < 64; sn++) {
-		const start = ptrtable[sn][0];
-		const loop = ptrtable[sn][1];
+	foreach (idx, ref sample; song.samples) {
+		const start = ptrtable[idx][0];
+		const loop = ptrtable[idx][1];
 		if (start == 0 || start == 0xffff) {
 			continue;
 		}
 		try {
-			song.samples[sn] = decodeSample(buffer, start, loop);
+			sample = decodeSample(buffer, start, loop);
 		} catch (Exception e) {
-			debug tracef("Couldn't load sample %d: %s", sn, e.msg);
+			debug tracef("Couldn't load sample %d: %s", idx, e.msg);
 		}
 	}
 }
