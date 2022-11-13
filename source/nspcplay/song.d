@@ -81,14 +81,14 @@ struct Phrase {
 struct Song {
 	ushort address;
 	ubyte changed;
-	Phrase[] order;
+	const(Phrase)[] order;
 	const(ubyte)[][8][ushort] pattern;
 	const(ubyte)[][ushort] subroutines;
 	const(ubyte[8])[] firCoefficients;
 	ubyte[8] releaseTable;
 	ubyte[16] volumeTable;
 	Variant variant;
-	Instrument[] instruments;
+	const(Instrument)[] instruments;
 	Sample[128] samples;
 	ubyte[256] percussionNotes;
 	size_t percussionBase;
@@ -374,7 +374,7 @@ private void decompileSong(scope ubyte[] data, ref Song song, int startAddress, 
 		return id;
 	}
 	enforce!NSPCException(phraseCount > 0, "No phrases in song");
-	song.order.length = phraseCount + 1;
+	auto newPhrases = new Phrase[](phraseCount + 1);
 	index++;
 
 	const fpIndex = index;
@@ -383,7 +383,7 @@ private void decompileSong(scope ubyte[] data, ref Song song, int startAddress, 
 	const phrases = wpO[0 .. index];
 	// Now the number of patterns is known, so go back and get the order
 	size_t idx;
-	foreach (ref order; song.order) {
+	foreach (ref order; newPhrases) {
 		if (phrases[idx] == 0) {
 			order.type = PhraseType.end;
 		} else if (phrases[idx] == 0x80) {
@@ -405,6 +405,7 @@ private void decompileSong(scope ubyte[] data, ref Song song, int startAddress, 
 		}
 		idx++;
 	}
+	song.order = newPhrases;
 
 	debug(nspclogging) tracef("Phrases: %(%s, %)", song.order);
 	song.validatePhrases();
