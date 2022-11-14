@@ -236,16 +236,11 @@ struct Song {
 				printSequence(tracks.get(track, []));
 			}
 		}
-		foreach (subroutineID, subroutine; tracks) {
-			bool isTrack;
+		outer: foreach (subroutineID, subroutine; tracks) {
 			foreach (trackList; trackLists) {
 				if (trackList[].canFind(subroutineID)) {
-					isTrack = true;
-					break;
+					continue outer;
 				}
-			}
-			if (isTrack) {
-				continue;
 			}
 			put(sink, "----------\n");
 			sink.formattedWrite!"Subroutine %04X\n"(subroutineID);
