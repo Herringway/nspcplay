@@ -103,7 +103,7 @@ struct Song {
 	private void loadSequence(const(ubyte)[] data, ushort base) @safe {
 		ubyte[65536] buffer;
 		loadAllSubpacks(buffer, data);
-		decompileSong(buffer[], this, base, cast(int)(base + data.length));
+		decompileSong(buffer[], this, base);
 	}
 	/// Load instruments from provided packs at the given addresses
 	void loadInstruments(const(ubyte)[][] packs, ushort instrumentBase, ushort sampleBase) @safe {
@@ -324,7 +324,7 @@ Song loadNSPCFile(const(ubyte)[] data) @safe {
 	debug(nspclogging) tracef("Release table: %s, volume table: %s", header.releaseTable, header.volumeTable);
 	const remaining = loadAllSubpacks(buffer[], data[NSPCFileHeader.sizeof .. $]);
 	processInstruments(song, buffer, header);
-	decompileSong(buffer[], song, header.songBase, buffer.length - 1);
+	decompileSong(buffer[], song, header.songBase);
 	if (header.firCoefficientTableCount == 0) {
 		song.firCoefficients = defaultFIRCoefficients;
 	} else {
@@ -333,7 +333,7 @@ Song loadNSPCFile(const(ubyte)[] data) @safe {
 	debug(nspclogging) tracef("FIR coefficients: %s", song.firCoefficients);
 	return song;
 }
-private void decompileSong(scope ubyte[] data, ref Song song, int startAddress, int endAddress) @safe {
+private void decompileSong(scope ubyte[] data, ref Song song, int startAddress) @safe {
 	immutable copyData = data.idup;
 	song.address = cast(ushort) startAddress;
 
