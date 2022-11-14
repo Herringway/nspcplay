@@ -187,6 +187,9 @@ struct Song {
 						case VCMD.percussionBaseInstrumentRedefine:
 							tmpPercussionBase = command.parameters[0];
 							break;
+						case VCMD.echoParameterSetup:
+							enforce!NSPCException(firCoefficients.length > command.parameters[2], "FIR coefficient table out of range!");
+							break;
 						default: //nothing to validate
 							break;
 					}
@@ -327,12 +330,12 @@ Song loadNSPCFile(const(ubyte)[] data) @safe {
 	debug(nspclogging) tracef("Release table: %s, volume table: %s", header.releaseTable, header.volumeTable);
 	const remaining = loadAllSubpacks(buffer[], data[NSPCFileHeader.sizeof .. $]);
 	processInstruments(song, buffer, header);
-	decompileSong(buffer[], song, header.songBase);
 	if (header.firCoefficientTableCount == 0) {
 		song.firCoefficients = defaultFIRCoefficients;
 	} else {
 		song.firCoefficients = cast(const(ubyte[8])[])remaining[0 .. 8 * header.firCoefficientTableCount];
 	}
+	decompileSong(buffer[], song, header.songBase);
 	debug(nspclogging) tracef("FIR coefficients: %s", song.firCoefficients);
 	return song;
 }
