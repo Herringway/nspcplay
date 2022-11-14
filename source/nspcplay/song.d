@@ -80,7 +80,6 @@ struct Phrase {
 
 struct Song {
 	ushort address;
-	ubyte changed;
 	const(Phrase)[] order;
 	ushort[8][ushort] trackLists;
 	const(ubyte)[][ushort] tracks;
@@ -337,7 +336,6 @@ Song loadNSPCFile(const(ubyte)[] data) @safe {
 private void decompileSong(scope ubyte[] data, ref Song song, int startAddress, int endAddress) @safe {
 	immutable copyData = data.idup;
 	song.address = cast(ushort) startAddress;
-	song.changed = false;
 
 	// Get order length and repeat info (at this point, we don't know how
 	// many patterns there are, so the pattern pointers aren't validated yet)
