@@ -180,7 +180,6 @@ struct Song {
 							validateInstrument(absoluteInstrumentID(command.parameters[0], tmpPercussionBase, false));
 							break;
 						case VCMD.subRoutine:
-							enforce!NSPCException(!isSub, "Can't call sub from within a sub");
 							ushort sub = read!ushort(command.parameters);
 							enforce!NSPCException(sub in tracks, format!"Subroutine %d not present"(sub));
 							enforce!NSPCException(command.parameters[2] != 0, "Subroutine loop count can not be 0");
@@ -434,16 +433,16 @@ private void decompileSong(scope ubyte[] data, ref Song song, int startAddress) 
 				continue;
 			}
 			debug(nspclogging) tracef("Decompiling track at %04X", trackAddress);
-			song.tracks[trackAddress] = decompileTrack(copyData, trackAddress, song, tmpPercussionBase);
+			song.tracks[trackAddress] = decompileTrack(copyData, trackAddress, song, tmpPercussionBase, true);
 		}
 	}
 }
-private const(ubyte)[] decompileTrack(immutable(ubyte)[] data, ushort start, ref Song song, ref ubyte tmpPercussionBase) @safe {
+private const(ubyte)[] decompileTrack(immutable(ubyte)[] data, ushort start, ref Song song, ref ubyte tmpPercussionBase, bool recurse) @safe {
 	// Determine the end of the track.
 	const(ubyte)[] trackEnd = data[start .. $];
-	size_t length;
 	size_t totalLength;
 	while (true) {
+		size_t length;
 		const command = readCommand(song.variant, trackEnd, length);
 		trackEnd = trackEnd[length .. $];
 		totalLength += length;
@@ -451,21 +450,10 @@ private const(ubyte)[] decompileTrack(immutable(ubyte)[] data, ushort start, ref
 			break;
 		}
 		if (command.special == VCMD.subRoutine) { //decompile subroutines too
+			enforce!NSPCException(recurse, "Subroutines can't call subroutines!");
 			ushort subPtr = read!ushort(command.parameters);
 
-			song.tracks.require(subPtr, () {
-				const(ubyte)[] st;
-				const(ubyte)[] subData = data[subPtr .. $];
-				size_t subLength;
-				size_t subTotalLength;
-				while (readCommand(song.variant, subData, subLength).type != VCMDClass.terminator) {
-					subData = subData[subLength .. $];
-					subTotalLength += subLength;
-				}
-				st = data[subPtr .. subPtr + subTotalLength + 1];
-				song.validateTrack(st, true, tmpPercussionBase);
-				return st;
-			}());
+			song.tracks.require(subPtr, decompileTrack(data, subPtr, song, tmpPercussionBase, false));
 		}
 	}
 	const track = data[start .. start + totalLength];
