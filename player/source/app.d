@@ -84,7 +84,7 @@ int main(string[] args) {
 		return 1;
 	}
 	if (verbose) {
-		sharedLog = new FileLogger(stdout, LogLevel.trace);
+		(cast()sharedLog).logLevel = LogLevel.trace;
 	}
 
 	auto filePath = args[1];
