@@ -417,7 +417,6 @@ private void decompileSong(scope ubyte[] data, ref Song song, int startAddress) 
 	song.tracks = null;
 
 	index = fpIndex;
-	ushort[] subTable;
 	ubyte tmpPercussionBase;
 	foreach (phrase; song.order) {
 		if (phrase.type != PhraseType.pattern) {
@@ -431,11 +430,11 @@ private void decompileSong(scope ubyte[] data, ref Song song, int startAddress) 
 				continue;
 			}
 			debug(nspclogging) tracef("Decompiling track at %04X", trackAddress);
-			song.tracks[trackAddress] = decompileTrack(copyData, trackAddress, 0x10000, song, subTable, tmpPercussionBase);
+			song.tracks[trackAddress] = decompileTrack(copyData, trackAddress, song, tmpPercussionBase);
 		}
 	}
 }
-private const(ubyte)[] decompileTrack(immutable(ubyte)[] data, ushort start, uint next, ref Song song, ref ushort[] subTable, ref ubyte tmpPercussionBase) @safe {
+private const(ubyte)[] decompileTrack(immutable(ubyte)[] data, ushort start, ref Song song, ref ubyte tmpPercussionBase) @safe {
 	// Determine the end of the track.
 	const(ubyte)[] trackEnd = data[start .. $];
 	size_t length;
