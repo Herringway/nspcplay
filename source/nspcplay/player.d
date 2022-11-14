@@ -155,11 +155,11 @@ private struct Parser {
 	ushort subroutineStartAddress;
 	/// Number of times to repeat the subroutine
 	ubyte subroutineCount;
-	Command popCommand(const Song song) nothrow @safe {
+	Command popCommand(const Song song) nothrow @safe pure {
 		bool _;
 		return popCommand(song, _);
 	}
-	Command popCommand(const Song song, out bool done) nothrow @safe {
+	Command popCommand(const Song song, out bool done) nothrow @safe pure {
 		size_t nextOffset;
 		const command = readCommand(song.variant, sequenceData, nextOffset);
 		if (command.type == VCMDClass.terminator) {
@@ -182,7 +182,7 @@ private struct Parser {
 // Rates (in samples) until next step is applied
 private immutable adsrGainRates = [ 0, 2048, 1536, 1280, 1024, 768, 640, 512, 384, 320, 256, 192, 160, 128, 96, 80, 64, 48, 40, 32, 24, 20, 16, 12, 10, 8, 6, 5, 4, 3, 2, 1 ];
 
-void doADSR(ref ChannelState channel) nothrow @safe {
+void doADSR(ref ChannelState channel) nothrow @safe pure {
 	ushort level() {
 		return cast(ushort)(((channel.gain - 1) >> 8) + 1);
 	}
@@ -228,7 +228,7 @@ void doADSR(ref ChannelState channel) nothrow @safe {
 	channel.gain = clamp(channel.gain, cast(short)0, cast(short)0x7FF);
 }
 
-void doEcho(ref SongState state, ref short leftSample, ref short rightSample, int mixrate) nothrow @safe {
+void doEcho(ref SongState state, ref short leftSample, ref short rightSample, int mixrate) nothrow pure @safe {
 	const echoAddress = state.echoBufferIndex * 2;
 
 	state.firLeft[state.firBufferIndex] = state.echoBuffer[echoAddress % state.echoBuffer.length] >> 1;
@@ -289,7 +289,7 @@ struct NSPCPlayer {
 
 	Interpolation interpolation = Interpolation.gaussian;
 	///
-	short[2][] fillBuffer(short[2][] buffer) nothrow @safe {
+	short[2][] fillBuffer(short[2][] buffer) nothrow pure @safe {
 		enum left = 0;
 		enum right = 1;
 		if (!songPlaying) {
@@ -356,7 +356,7 @@ struct NSPCPlayer {
 		return buffer[0 .. length];
 	}
 
-	private void calcTotalVolume(const SongState st, ref ChannelState c, byte tremoloPhase) nothrow @safe {
+	private void calcTotalVolume(const SongState st, ref ChannelState c, byte tremoloPhase) nothrow @safe pure {
 		ubyte v = (tremoloPhase << 1 ^ tremoloPhase >> 7) & 0xFF;
 		v = ~(v * c.tremoloRange >> 8) & 0xFF;
 
@@ -366,7 +366,7 @@ struct NSPCPlayer {
 		c.totalVolume = v * v >> 8;
 	}
 
-	private int calcVolume3(const ChannelState c, int pan, int flag) nothrow @safe {
+	private int calcVolume3(const ChannelState c, int pan, int flag) nothrow pure @safe {
 		static immutable ubyte[] panTable = [0x00, 0x01, 0x03, 0x07, 0x0D, 0x15, 0x1E, 0x29, 0x34, 0x42, 0x51, 0x5E, 0x67, 0x6E, 0x73, 0x77, 0x7A, 0x7C, 0x7D, 0x7E, 0x7F, 0x7F];
 		const ubyte[] ph = panTable[pan >> 8 .. (pan >> 8) + 2];
 		int v = ph[0] + ((ph[1] - ph[0]) * (pan & 255) >> 8);
@@ -377,18 +377,18 @@ struct NSPCPlayer {
 		return v;
 	}
 
-	private void calcVolume2(ref ChannelState c, int pan) nothrow @safe {
+	private void calcVolume2(ref ChannelState c, int pan) nothrow pure @safe {
 		c.leftVolume = cast(byte) calcVolume3(c, pan, 0x80);
 		c.rightVolume = cast(byte) calcVolume3(c, 0x1400 - pan, 0x40);
 	}
 
-	private void makeSlider(ref Slider s, int cycles, int target) nothrow @safe {
+	private void makeSlider(ref Slider s, int cycles, int target) nothrow pure @safe {
 		s.delta = cast(ushort)(((target << 8) - (s.current & 0xFF00)) / cycles);
 		s.cycles = cast(ubyte) cycles;
 		s.target = cast(ubyte) target;
 	}
 
-	private void setInstrument(ref SongState st, ref ChannelState c, size_t instrument) nothrow @safe {
+	private void setInstrument(ref SongState st, ref ChannelState c, size_t instrument) nothrow pure @safe {
 		const idata = currentSong.instruments[instrument];
 		c.instrument = cast(ubyte) instrument;
 		c.instrumentADSRGain = idata.adsrGain;
@@ -398,7 +398,7 @@ struct NSPCPlayer {
 	}
 
 	// calculate how far to advance the sample pointer on each output sample
-	private void setFrequency(ref ChannelState c, int note16) const nothrow @safe {
+	private void setFrequency(ref ChannelState c, int note16) const nothrow pure @safe {
 		static immutable ushort[13] noteFrequencyTable = [0x085F, 0x08DF, 0x0965, 0x09F4, 0x0A8C, 0x0B2C, 0x0BD6, 0x0C8B, 0x0D4A, 0x0E14, 0x0EEA, 0x0FCD, 0x10BE];
 
 		// What is this for???
@@ -428,7 +428,7 @@ struct NSPCPlayer {
 		c.noteFrequency = (freq * (nativeSamplingRate << (15 - 12))) / mixrate;
 	}
 
-	private int calcVibratoDisp(ref ChannelState c, int phase) nothrow @safe {
+	private int calcVibratoDisp(ref ChannelState c, int phase) nothrow pure @safe {
 		int range = c.currentVibratoRange;
 		if (range > 0xF0) {
 			range = (range - 0xF0) * 256;
@@ -446,7 +446,7 @@ struct NSPCPlayer {
 		return disp; /*   \/ */
 	}
 	// do a Ex/Fx code
-	private void doCommand(ref SongState st, ref ChannelState c, const Command command) nothrow @safe {
+	private void doCommand(ref SongState st, ref ChannelState c, const Command command) nothrow pure @safe {
 		final switch (command.special) {
 			case VCMD.instrument:
 				setInstrument(st, c, currentSong.absoluteInstrumentID(command.parameters[0], st.percussionBase, false));
@@ -558,13 +558,12 @@ struct NSPCPlayer {
 				debug(nspclogging) warningf("Unhandled command: %s", command);
 				break;
 			case VCMD.invalid: //do nothing
-				assumeWontThrow(errorf("Invalid command"));
-				break;
+				assert(0, "Invalid command");
 		}
 	}
 
 	// $0654 + $08D4-$8EF
-	private void doNote(ref SongState st, ref ChannelState c, const Command command) nothrow @safe {
+	private void doNote(ref SongState st, ref ChannelState c, const Command command) nothrow pure @safe {
 		ubyte note = command.note;
 		// using >=CA as a note switches to that instrument and plays a predefined note
 		if (command.type == VCMDClass.percussion) {
@@ -633,7 +632,7 @@ struct NSPCPlayer {
 		c.noteRelease = cast(ubyte) rel;
 	}
 
-	private void loadPattern() nothrow @safe {
+	private void loadPattern() nothrow pure @safe {
 		state.phraseCounter++;
 		const nextPhrase = currentSong.order[state.phraseCounter];
 		debug(nspclogging) tracef("Next phrase: %s", nextPhrase);
@@ -678,7 +677,7 @@ struct NSPCPlayer {
 		}
 	}
 
-	private void doKeySweepVibratoChecks(ref ChannelState c) nothrow @safe {
+	private void doKeySweepVibratoChecks(ref ChannelState c) nothrow pure @safe {
 		// key off
 		if (c.noteRelease) {
 			c.noteRelease--;
@@ -721,7 +720,7 @@ struct NSPCPlayer {
 	}
 
 	// $07F9 + $0625
-	private bool doCycle(ref SongState st) nothrow @safe {
+	private bool doCycle(ref SongState st) nothrow pure @safe {
 		foreach (ref channel; st.channels) {
 			if (channel.parser.sequenceData == null) {
 				continue; //8F0
@@ -805,7 +804,7 @@ struct NSPCPlayer {
 		return true;
 	}
 
-	private int subCycleCalc(const SongState st, int delta) nothrow @safe {
+	private int subCycleCalc(const SongState st, int delta) nothrow pure @safe {
 		if (delta < 0x8000) {
 			return st.cycleTimer * delta >> 8;
 		} else {
@@ -813,7 +812,7 @@ struct NSPCPlayer {
 		}
 	}
 
-	private void doSubCycle(ref SongState st) nothrow @safe {
+	private void doSubCycle(ref SongState st) nothrow pure @safe {
 		foreach (ref channel; st.channels) {
 			if (channel.parser.sequenceData == null) {
 				continue;
@@ -852,7 +851,7 @@ struct NSPCPlayer {
 		}
 	}
 
-	private bool doTimer() nothrow @safe {
+	private bool doTimer() nothrow pure @safe {
 		state.cycleTimer += state.tempo.current >> 8;
 		if (state.cycleTimer >= 256) {
 			state.cycleTimer -= 256;
@@ -869,7 +868,7 @@ struct NSPCPlayer {
 	}
 
 	/// Initialize or reset the player state
-	void initialize() nothrow @safe {
+	void initialize() nothrow pure @safe {
 		state = state.init;
 
 		state.percussionBase = cast(ubyte)currentSong.percussionBase;
@@ -880,20 +879,20 @@ struct NSPCPlayer {
 		}
 		state.tempo.current = currentSong.defaultTempo << 8;
 	}
-	void initialize(int sampleRate) nothrow @safe {
+	void initialize(int sampleRate) nothrow pure @safe {
 		initialize();
 		mixrate = sampleRate;
 	}
 
 	/// Start playing music
-	void play() @safe nothrow {
+	void play() @safe pure nothrow {
 		initialize(mixrate);
 		songPlaying = true;
 	}
-	void stop() @safe nothrow {
+	void stop() @safe pure nothrow {
 		songPlaying = false;
 	}
-	void loadSong(Song song) {
+	void loadSong(Song song) @safe pure nothrow {
 		if (songPlaying) {
 			stop();
 		}
@@ -901,15 +900,15 @@ struct NSPCPlayer {
 		initialize();
 	}
 	/// Sets the playback speed. Default value is NSPCPlayer.defaultSpeed.
-	public void setSpeed(ushort rate) @safe nothrow {
+	public void setSpeed(ushort rate) @safe nothrow pure {
 		timerSpeed = rate;
 	}
 	/// Enable or disable song looping
-	public void looping(bool enabled) @safe nothrow {
+	public void looping(bool enabled) @safe nothrow pure {
 		loopEnabled = enabled;
 	}
 	/// Enable or disable a song channel
-	public void setChannelEnabled(ubyte channel, bool enabled) @safe nothrow {
+	public void setChannelEnabled(ubyte channel, bool enabled) @safe nothrow pure {
 		state.channels[channel].enabled = enabled;
 	}
 	bool isPlaying() const pure @safe nothrow {
