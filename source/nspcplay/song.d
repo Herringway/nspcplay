@@ -175,17 +175,21 @@ struct Song {
 				case VCMDClass.special:
 					enforce!NSPCException(command.special != VCMD.invalid, format!"Invalid code command %02X"(command.relative));
 
-					if (command.special == VCMD.instrument) {
-						validateInstrument(absoluteInstrumentID(command.parameters[0], tmpPercussionBase, false));
-					}
-					if (command.special == VCMD.subRoutine) {
-						enforce!NSPCException(!isSub, "Can't call sub from within a sub");
-						ushort sub = read!ushort(command.parameters);
-						enforce!NSPCException(sub in tracks, format!"Subroutine %d not present"(sub));
-						enforce!NSPCException(command.parameters[2] != 0, "Subroutine loop count can not be 0");
-					}
-					if (command.special == VCMD.percussionBaseInstrumentRedefine) {
-						tmpPercussionBase = command.parameters[0];
+					switch(command.special) {
+						case VCMD.instrument:
+							validateInstrument(absoluteInstrumentID(command.parameters[0], tmpPercussionBase, false));
+							break;
+						case VCMD.subRoutine:
+							enforce!NSPCException(!isSub, "Can't call sub from within a sub");
+							ushort sub = read!ushort(command.parameters);
+							enforce!NSPCException(sub in tracks, format!"Subroutine %d not present"(sub));
+							enforce!NSPCException(command.parameters[2] != 0, "Subroutine loop count can not be 0");
+							break;
+						case VCMD.percussionBaseInstrumentRedefine:
+							tmpPercussionBase = command.parameters[0];
+							break;
+						default: //nothing to validate
+							break;
 					}
 					break;
 				case VCMDClass.note: // nothing to validate here
