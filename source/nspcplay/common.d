@@ -3,6 +3,7 @@ module nspcplay.common;
 enum Variant : uint {
 	standard = 0,
 	prototype = 1, // Early SNES games from Nintendo
+	konami = 2, // Konami's NSPC variant - NYI
 }
 
 enum Interpolation {

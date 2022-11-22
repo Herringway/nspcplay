@@ -212,6 +212,9 @@ struct Song {
 		return id;
 	}
 	package ubyte defaultTempo() const @safe pure nothrow {
+		if (variant == Variant.konami) {
+			return 0x40;
+		}
 		if (variant == Variant.prototype) {
 			return 0x36;
 		}

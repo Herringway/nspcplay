@@ -452,10 +452,12 @@ struct NSPCPlayer {
 				setInstrument(st, c, currentSong.absoluteInstrumentID(command.parameters[0], st.percussionBase, false));
 				break;
 			case VCMD.panning:
+			case VCMD.konamiPanning: // ???
 				c.panFlags = command.parameters[0];
 				c.panning.current = (command.parameters[0] & 0x1F) << 8;
 				break;
 			case VCMD.panningFade:
+			case VCMD.konamiPanningFade: // ???
 				makeSlider(c.panning, command.parameters[0], command.parameters[1]);
 				break;
 			case VCMD.vibratoOn:
@@ -538,7 +540,9 @@ struct NSPCPlayer {
 				st.targetEchoVolumeLeft = command.parameters[1];
 				st.targetEchoVolumeRight = command.parameters[2];
 				break;
-			case VCMD.noop: //do nothing
+			case VCMD.noop0: //do nothing
+			case VCMD.noop1: //do nothing
+			case VCMD.noop2: //do nothing
 				break;
 			case VCMD.pitchSlideToNote:
 				c.currentPortStartCounter = command.parameters[0];
@@ -552,10 +556,18 @@ struct NSPCPlayer {
 			case VCMD.percussionBaseInstrumentRedefine:
 				st.percussionBase = command.parameters[0];
 				break;
+			case VCMD.konamiADSRGain:
+				c.instrumentADSRGain = (cast(const(ADSRGain)[])(command.parameters[0 .. 3]))[0];
+				break;
+			case VCMD.konamiE4: // ???
+			case VCMD.konamiLoopStart: // ???
+			case VCMD.konamiLoopEnd: // ???
+			case VCMD.konamiE7: // ???
+			case VCMD.konamiF5: // ???
 			case VCMD.channelMute:
 			case VCMD.fastForwardOn:
 			case VCMD.fastForwardOff:
-				debug(nspclogging) warningf("Unhandled command: %s", command);
+				debug(nspclogging) warningf("Unhandled command: %x", command);
 				break;
 			case VCMD.invalid: //do nothing
 				assert(0, "Invalid command");
