@@ -7,26 +7,35 @@ enum Mode {
 	spc
 }
 
-void main(string[] args) {
+int main(string[] args) {
+	(cast()sharedLog).logLevel = LogLevel.trace;
 	enum validArgs = ["spc", "packs"];
 	if (args.length == 1) {
 		stderr.writefln!"Missing argument - valid options are %-('%s', %)"(validArgs);
-		return;
+		return 1;
 	}
+	const(ubyte)[] finished;
+	string filename;
 	switch (args[1].toLower) {
 		case "spc":
-			buildNSPCFromSPC(args[0] ~ args[2 .. $]);
+			finished = buildNSPCFromSPC(args[0] ~ args[2 .. $], filename);
 			break;
 		case "packs":
-			buildNSPCFromPackfiles(args[0] ~ args[2 .. $]);
+			finished = buildNSPCFromPackfiles(args[0] ~ args[2 .. $], filename);
 			break;
 		default:
 			stderr.writefln!"Invalid argument - valid options are %-('%s', %)"(validArgs);
-			break;
+			return 1;
 	}
+	if (finished == []) {
+		return 1;
+	}
+	const loadedSong = loadNSPCFile(finished);
+	File(filename, "w").rawWrite(finished);
+	return 0;
 }
 
-void buildNSPCFromSPC(string[] args) {
+const(ubyte)[] buildNSPCFromSPC(string[] args, out string filename) {
 	NSPCFileHeader header;
 	void handleIntegers(string opt, string value) {
 		ushort val;
@@ -49,16 +58,16 @@ void buildNSPCFromSPC(string[] args) {
 				throw new Exception("Unknown option "~opt);
 		}
 	}
-	string filename;
 	auto helpInfo = getopt(args,
 		"o|output", "Filename to write to (defaults to filename.nspc)", &filename,
 		"s|songaddress", "Address of song data", &handleIntegers,
 		"a|sampleaddress", "Address of sample data", &handleIntegers,
 		"i|instrumentaddress", "Address of instrument data", &handleIntegers,
+		"v|variant", "NSPC variant to use", &header.variant,
 	);
 	if (helpInfo.helpWanted || (args.length == 1)) {
 		defaultGetoptPrinter(format!"NSPC creation tool (SPC conversion)\nUsage: %s spc <filename.spc>"(args[0]), helpInfo.options);
-		return;
+		return [];
 	}
 	if (!filename) {
 		filename = args[1].baseName.withExtension(".nspc").text;
@@ -69,15 +78,21 @@ void buildNSPCFromSPC(string[] args) {
 		infof("Using auto-detected sample directory: %04X", sampleDirectory << 8);
 		header.sampleBase = sampleDirectory << 8;
 	}
-	auto f = File(filename, "w");
-	f.rawWrite([header]);
-	f.rawWrite(cast(ushort[])[65535, 0]);
-	f.rawWrite(spcFile[0x100 .. 0x100FF]);
-	f.rawWrite(cast(ushort[])[0]);
+	Appender!(const(ubyte)[]) buf;
+	buf ~= HeaderBytes(header).raw[];
+	buf.append!ushort(65535);
+	buf.append!ushort(0);
+	buf ~= spcFile[0x100 .. 0x100FF];
+	buf.append!ushort(0);
+	return buf.data;
 }
 
+union HeaderBytes {
+	NSPCFileHeader header;
+	ubyte[NSPCFileHeader.sizeof] raw;
+}
 
-void buildNSPCFromPackfiles(string[] args) {
+const(ubyte)[] buildNSPCFromPackfiles(string[] args, out string filename) {
 	NSPCFileHeader header;
 	void handleIntegers(string opt, string value) {
 		ushort val;
@@ -100,25 +115,22 @@ void buildNSPCFromPackfiles(string[] args) {
 				throw new Exception("Unknown option "~opt);
 		}
 	}
-	string filename;
 	auto helpInfo = getopt(args,
 		"o|output", "Filename to write to (defaults to filename.nspc)", &filename,
 		"s|songaddress", "Address of song data", &handleIntegers,
 		"a|sampleaddress", "Address of sample data", &handleIntegers,
 		"i|instrumentaddress", "Address of instrument data", &handleIntegers,
+		"v|variant", "NSPC variant to use", &header.variant,
 	);
 	if (helpInfo.helpWanted || (args.length == 1)) {
 		defaultGetoptPrinter(format!"NSPC creation tool (Packfile conversion)\nUsage: %s spc <filename.bin> [filename.bin ...]"(args[0]), helpInfo.options);
-		return;
+		return [];
 	}
 	if (!filename) {
 		filename = args[1].baseName.withExtension(".nspc").text;
 	}
-	auto f = File(filename, "w");
-	f.rawWrite([header]);
-	bool songAddressFound;
-	bool instrumentAddressFound;
-	bool sampleAddressFound;
+	Appender!(const(ubyte)[]) buf;
+	buf ~= HeaderBytes(header).raw[];
 	foreach(file; args[1 .. $]) {
 		auto packFile = cast(ubyte[])read(file);
 		size_t offset;
@@ -131,24 +143,13 @@ void buildNSPCFromPackfiles(string[] args) {
 				break;
 			}
 			auto spcOffset = (cast(ushort[])(packFile[offset + 2 .. offset + 4]))[0];
-			songAddressFound |= header.songBase.inRange(spcOffset, spcOffset + size);
-			sampleAddressFound |= header.sampleBase.inRange(spcOffset, spcOffset + size);
-			instrumentAddressFound |= header.instrumentBase.inRange(spcOffset, spcOffset + size);
 			infof("Song subpack: $%04X, %04X bytes", spcOffset, size);
-			f.rawWrite(packFile[offset .. offset + size + 4]);
+			buf ~= packFile[offset .. offset + size + 4];
 			offset += size + 4;
 		}
 	}
-	f.rawWrite(cast(ushort[])[0]);
-	if (!songAddressFound) {
-		warningf("Song address %04X not within provided data", header.songBase);
-	}
-	if (!instrumentAddressFound) {
-		warningf("Instrument address %04X not within provided data", header.instrumentBase);
-	}
-	if (!sampleAddressFound) {
-		warningf("Sample address %04X not within provided data", header.sampleBase);
-	}
+	buf.append!ushort(0);
+	return buf.data;
 }
 
 bool inRange(T)(T val, T lower, T upper) {
