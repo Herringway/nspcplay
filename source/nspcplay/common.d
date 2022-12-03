@@ -127,6 +127,10 @@ struct Instrument {
 	ushort tuning() const pure @safe nothrow {
 		return (_tuning << 8) + _tuningFraction;
 	}
+	void tuning(ushort val) pure @safe nothrow {
+		_tuning = (val & 0xFF00) >> 8;
+		_tuningFraction = val & 0xFF;
+	}
 	void toString(S)(ref S sink) const {
 		import std.format: formattedWrite;
 		try {

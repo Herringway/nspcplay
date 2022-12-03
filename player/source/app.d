@@ -147,6 +147,20 @@ int main(string[] args) {
 	if (!dumpBRRFiles && (outfile != "")) {
 		dumpWav(nspc, sampleRate, channels, outfile);
 	} else if (printSong) {
+		writeln("Instruments:");
+		foreach (idx, instrument; song.instruments) {
+			if ((instrument.sampleID < song.samples.length) && song.samples[instrument.sampleID].isValid && (instrument.tuning != 0)) {
+				const sample = song.samples[instrument.sampleID];
+				writef!"%s (%s) - Sample: %s (%s, samples: %s, "(idx, ((song.percussionBase > 0) && (idx > song.percussionBase)) ? "Percussion" : "Standard", instrument.sampleID, sample.hash.toHexString, sample.data.length);
+				if (sample.loopLength) {
+					writef!"Loop: %s-%s"(sample.loopLength, sample.data.length);
+				} else {
+					write("No loop");
+				}
+				writefln!"), ADSR/Gain: %s, tuning: %s"(instrument.adsrGain, instrument.tuning);
+			}
+		}
+		writeln("Sequence:");
 		writeln(song);
 	} else if (dumpBRRFiles) {
 		if (!outfile.exists) {
