@@ -342,6 +342,7 @@ struct Command {
 						sink.formattedWrite!"Set song volume: %s"(parameters[0]);
 						break;
 					case VCMD.songVolumeFade:
+						sink.formattedWrite!"Set song volume fade: ticks: %s, target: %s"(parameters[0], parameters[1]);
 						break;
 					case VCMD.tempo:
 						sink.formattedWrite!"Set song tempo: %s"(256.0 / parameters[0]);
