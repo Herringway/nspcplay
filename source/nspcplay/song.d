@@ -11,7 +11,7 @@ import nspcplay.common;
 import nspcplay.samples;
 import nspcplay.sequence;
 
-private enum maxInstruments = 64;
+private enum maxInstruments = 128;
 private enum maxSampleCount = 128;
 
 enum PhraseType {
