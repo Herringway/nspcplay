@@ -391,9 +391,12 @@ struct NSPCPlayer {
 	private void setInstrument(ref SongState st, ref ChannelState c, size_t instrument) nothrow pure @safe {
 		const idata = currentSong.instruments[instrument];
 		c.instrument = cast(ubyte) instrument;
-		c.instrumentADSRGain = idata.adsrGain;
-		if (idata.adsrGain.mode == ADSRGainMode.directGain) {
-			c.gain = idata.adsrGain.fixedVolume;
+		setADSRGain(c, idata.adsrGain);
+	}
+	private void setADSRGain(ref ChannelState c, const ADSRGain adsrGain) nothrow pure @safe {
+		c.instrumentADSRGain = adsrGain;
+		if (adsrGain.mode == ADSRGainMode.directGain) {
+			c.gain = adsrGain.fixedVolume;
 		}
 	}
 
