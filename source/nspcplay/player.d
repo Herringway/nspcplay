@@ -560,7 +560,7 @@ struct NSPCPlayer {
 				st.percussionBase = command.parameters[0];
 				break;
 			case VCMD.konamiADSRGain:
-				c.instrumentADSRGain = (cast(const(ADSRGain)[])(command.parameters[0 .. 3]))[0];
+				setADSRGain(c, konamiADSRGain(command.parameters));
 				break;
 			case VCMD.konamiE4: // ???
 			case VCMD.konamiLoopStart: // ???

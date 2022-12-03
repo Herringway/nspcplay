@@ -148,3 +148,13 @@ class NSPCException : Exception {
 package T read(T)(const(ubyte)[] data, size_t offset = 0) {
 	return (cast(const(T)[])(data[offset .. offset + T.sizeof]))[0];
 }
+
+ADSRGain konamiADSRGain(const ubyte[] parameters) nothrow pure @safe {
+	ADSRGain tmp;
+	if (parameters[0] < 160) {
+		tmp.adsr = ((parameters[0] % 10) & 7) | (parameters[0] / 10) | 0x80;
+	}
+	tmp.adsr |= (((parameters[1] % 30) + 2) | ((parameters[1] / 30) << 5)) << 8;
+	tmp.gain = parameters[2];
+	return tmp;
+}

@@ -420,7 +420,7 @@ struct Command {
 						sink.formattedWrite!"Loop end?: times: %s, volume delta: %s, pitch delta: %s"(parameters[0], parameters[1], parameters[2]);
 						break;
 					case VCMD.konamiADSRGain:
-						sink.formattedWrite!"Set ADSR/gain: %s"((cast(const(ADSRGain)[])parameters[0 .. 3])[0]);
+						sink.formattedWrite!"Set ADSR/gain: %s"(konamiADSRGain(parameters));
 						break;
 					case VCMD.konamiPanning:
 						put(sink, "Panning?");
