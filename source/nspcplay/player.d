@@ -121,6 +121,12 @@ private struct ChannelState {
 
 	short[8] interpolationBuffer;
 	short lastSample;
+
+	// Konami-specific state
+	ushort loopStart;
+	ushort loopCount;
+	ubyte noteDelta; //TODO: implement this. what unit does this use?
+	ubyte volumeDelta; //ditto
 	void setADSRPhase(ADSRPhase phase) @safe pure nothrow {
 		adsrCounter = 0;
 		adsrPhase = phase;
@@ -155,6 +161,10 @@ private struct Parser {
 	ushort subroutineStartAddress;
 	/// Number of times to repeat the subroutine
 	ubyte subroutineCount;
+	/// Sequence data at  the start of a loop
+	const(ubyte)[] loopStart;
+	/// Number of times to loop
+	ubyte loopCount = 0xFF;
 	Command popCommand(const Song song) nothrow @safe pure {
 		bool _;
 		return popCommand(song, _);
@@ -166,6 +176,20 @@ private struct Parser {
 			done = subroutineCount == 0;
 			if (!done) {
 				sequenceData = --subroutineCount ? song.tracks[subroutineStartAddress] : subroutineReturnData;
+			}
+		} else if ((command.type == VCMDClass.special) && (command.special == VCMD.konamiLoopStart)) {
+			sequenceData = sequenceData[nextOffset .. $];
+			loopStart = sequenceData[];
+		} else if ((command.type == VCMDClass.special) && (command.special == VCMD.konamiLoopEnd)) {
+			if (loopCount == 0xFF) {
+				loopCount = cast(ubyte)(command.parameters[0] - 1);
+			}
+			if (loopCount > 0) {
+				sequenceData = loopStart;
+				loopCount--;
+			} else {
+				loopCount = 0xFF;
+				sequenceData = sequenceData[nextOffset .. $];
 			}
 		} else if ((command.type == VCMDClass.special) && (command.special == VCMD.subRoutine)) {
 			subroutineReturnData = sequenceData[nextOffset .. $];
@@ -547,6 +571,9 @@ struct NSPCPlayer {
 			case VCMD.noop1: //do nothing
 			case VCMD.noop2: //do nothing
 				break;
+			case VCMD.konamiLoopStart: // handled by parser
+			case VCMD.konamiLoopEnd:
+				break;
 			case VCMD.pitchSlideToNote:
 				c.currentPortStartCounter = command.parameters[0];
 				int target = command.parameters[2] + st.transpose;
@@ -563,8 +590,6 @@ struct NSPCPlayer {
 				setADSRGain(c, konamiADSRGain(command.parameters));
 				break;
 			case VCMD.konamiE4: // ???
-			case VCMD.konamiLoopStart: // ???
-			case VCMD.konamiLoopEnd: // ???
 			case VCMD.konamiE7: // ???
 			case VCMD.konamiF5: // ???
 			case VCMD.channelMute:
