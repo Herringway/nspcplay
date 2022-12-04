@@ -485,9 +485,7 @@ private void processInstruments(ref Song song, scope const ubyte[] buffer, const
 			song.percussionNotes[idx] = cast(ubyte)(percussion.note - 0x80);
 		}
 	} else {
-		foreach (idx, instrument; cast(const(Instrument)[])(buffer[header.instrumentBase .. header.instrumentBase + maxInstruments * Instrument.sizeof])) {
-			song.instruments ~= instrument;
-		}
+		song.instruments = cast(const(Instrument)[])(buffer[header.instrumentBase .. header.instrumentBase + maxInstruments * Instrument.sizeof]);
 		song.percussionNotes = 0x24;
 	}
 	debug(nspclogging) foreach (idx, instrument; song.instruments) {
