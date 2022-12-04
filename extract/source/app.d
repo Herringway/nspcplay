@@ -19,6 +19,8 @@ int main(string[] args) {
 	mkdirRecurse(args[2]);
 	if (rom.title == "KIRBY SUPER DELUXE   ") {
 		extractKSS(rom.data, args[2]);
+	} else if (rom.title == "Kirby's Dream Course ") {
+		extractKDC(rom.data, args[2]);
 	} else if (rom.title == "EARTH BOUND          ") {
 		extractEarthbound(rom.data, args[2]);
 	} else if (rom.title == "SUPER MARIOWORLD     ") {
@@ -113,6 +115,43 @@ void extractEarthbound(const scope ubyte[] data, string outDir) {
 			writePack(pack);
 		}
 	}
+}
+
+void extractKDC(const scope ubyte[] data, string outDir) {
+	const sequencePackPointerTable = cast(uint[])data[0x3745 .. 0x3745 + 33 * uint.sizeof];
+	const samplePackPointerTable = cast(uint[])data[0x372D .. 0x372D + 3 * uint.sizeof];
+	const instrumentPackPointerTable = cast(uint[])data[0x373B .. 0x373B + 2 * uint.sizeof];
+	const(ubyte[])[] globalPacks;
+	foreach (pack; samplePackPointerTable) {
+		globalPacks ~= readPacks(data[loromToPC(pack) .. $]);
+	}
+	foreach (pack; instrumentPackPointerTable) {
+		globalPacks ~= readPacks(data[loromToPC(pack) .. $]);
+	}
+	foreach (id, sequencePackPointer; sequencePackPointerTable) {
+		auto file = File(buildPath(outDir, format!"%03X.nspc"(id)), "w");
+		const seqPack = readPacks(data[loromToPC(sequencePackPointer) .. $]);
+		NSPCFileHeader header;
+		header.songBase = 0x6502;
+		header.sampleBase = 0x400;
+		header.instrumentBase = 0x600;
+		header.volumeTable = VolumeTable.hal3;
+		header.releaseTable = ReleaseTable.hal3;
+		file.rawWrite([header]);
+		foreach (instrumentPack; globalPacks) {
+			file.rawWrite(instrumentPack);
+		}
+		file.rawWrite(seqPack);
+		file.rawWrite(packTerminator);
+	}
+}
+
+uint loromToPC(uint addr) @safe pure {
+	return (((addr & 0x7FFFFF) >> 1) & 0xFF8000) + (addr & 0x7FFF);
+}
+
+@safe unittest {
+	assert(loromToPC(0x97EDA8) == 0xBEDA8);
 }
 
 void extractKSS(const scope ubyte[] data, string outDir) {
