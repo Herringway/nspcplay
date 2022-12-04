@@ -221,7 +221,7 @@ void extractSMW(const scope ubyte[] data, string outDir) {
 		result ~= cast(const(ubyte)[])packHeader ~ pack.data;
 		return result;
 	}
-	immutable ubyte[8][] firCoefficients = cast(const(ubyte[8])[])(data[firCoefficientsTable .. firCoefficientsTable + 2 * 8]);
+	const ubyte[8][] firCoefficients = cast(const(ubyte[8])[])(data[firCoefficientsTable .. firCoefficientsTable + 2 * 8]);
 	foreach (bank, pack; chain(parsedProg, parsedSeq1, parsedSeq2, parsedSeq3).enumerate) {
 		if (pack.address == 0x1360) {
 			ushort currentOffset = tableBase;
@@ -238,7 +238,7 @@ void extractSMW(const scope ubyte[] data, string outDir) {
 				header.songBase = songAddr;
 				header.sampleBase = 0x8000;
 				header.instrumentBase = 0x5F46;
-				header.variant = nspc.Variant.prototype;
+				header.variant = nspcplay.Variant.prototype;
 				header.extra.percussionBase = 0x5FA5;
 				header.volumeTable = VolumeTable.nintendo;
 				header.releaseTable = ReleaseTable.nintendo;
