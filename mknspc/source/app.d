@@ -54,6 +54,13 @@ const(ubyte)[] buildNSPCFromSPC(string[] args, out string filename) {
 			case "i|instrumentaddress":
 				header.instrumentBase = val;
 				break;
+			case "addmusick-custominstruments":
+				header.extra.customInstruments = val;
+				break;
+			case "prototype-percussionbase":
+			case "addmusick-percussionbase":
+				header.extra.percussionBase = val;
+				break;
 			default:
 				throw new Exception("Unknown option "~opt);
 		}
@@ -63,6 +70,8 @@ const(ubyte)[] buildNSPCFromSPC(string[] args, out string filename) {
 		"s|songaddress", "Address of song data", &handleIntegers,
 		"a|sampleaddress", "Address of sample data", &handleIntegers,
 		"i|instrumentaddress", "Address of instrument data", &handleIntegers,
+		"prototype-percussionbase|addmusick-percussionbase", "Percussion base id (prototype, addmusick variants)", &handleIntegers,
+		"addmusick-custominstruments", "Custom instrument address (addmusick variant)", &handleIntegers,
 		"v|variant", "NSPC variant to use", &header.variant,
 	);
 	if (helpInfo.helpWanted || (args.length == 1)) {

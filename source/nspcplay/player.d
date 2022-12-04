@@ -180,6 +180,22 @@ private struct Parser {
 		} else if ((command.type == VCMDClass.special) && (command.special == VCMD.konamiLoopStart)) {
 			sequenceData = sequenceData[nextOffset .. $];
 			loopStart = sequenceData[];
+		} else if ((command.type == VCMDClass.special) && (command.special == VCMD.amkSubloop)) {
+			if (command.parameters[0] == 0) {
+				sequenceData = sequenceData[nextOffset .. $];
+				loopStart = sequenceData[];
+			} else {
+				if (loopCount == 0xFF) {
+					loopCount = cast(ubyte)(command.parameters[0]);
+				}
+				if (loopCount > 0) {
+					sequenceData = loopStart;
+					loopCount--;
+				} else {
+					loopCount = 0xFF;
+					sequenceData = sequenceData[nextOffset .. $];
+				}
+			}
 		} else if ((command.type == VCMDClass.special) && (command.special == VCMD.konamiLoopEnd)) {
 			if (loopCount == 0xFF) {
 				loopCount = cast(ubyte)(command.parameters[0] - 1);
@@ -573,6 +589,7 @@ struct NSPCPlayer {
 				break;
 			case VCMD.konamiLoopStart: // handled by parser
 			case VCMD.konamiLoopEnd:
+			case VCMD.amkSubloop:
 				break;
 			case VCMD.pitchSlideToNote:
 				c.currentPortStartCounter = command.parameters[0];
@@ -589,12 +606,31 @@ struct NSPCPlayer {
 			case VCMD.konamiADSRGain:
 				setADSRGain(c, konamiADSRGain(command.parameters));
 				break;
+			case VCMD.amkSetADSRGain:
+				setADSRGain(c, amkADSRGain(command.parameters));
+				break;
+			case VCMD.amkSetFIR:
+				st.firCoefficients = command.parameters;
+				break;
+			case VCMD.amkF4:
+				if (command.parameters[0] == 9) {
+					setInstrument(st, c, c.instrument);
+					break;
+				}
+				goto case;
 			case VCMD.konamiE4: // ???
 			case VCMD.konamiE7: // ???
 			case VCMD.konamiF5: // ???
 			case VCMD.channelMute:
 			case VCMD.fastForwardOn:
 			case VCMD.fastForwardOff:
+			case VCMD.amkSampleLoad:
+			case VCMD.amkWriteDSP:
+			case VCMD.amkEnableNoise:
+			case VCMD.amkSendData:
+			case VCMD.amkFA:
+			case VCMD.amkFB:
+			case VCMD.amkRemoteCommand:
 				debug(nspclogging) warningf("Unhandled command: %x", command);
 				break;
 			case VCMD.invalid: //do nothing

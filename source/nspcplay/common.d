@@ -4,6 +4,7 @@ enum Variant : uint {
 	standard = 0,
 	prototype = 1, // Early SNES games from Nintendo
 	konami = 2, // Konami's NSPC variant - NYI
+	addmusick = 3, /// AddMusicK, a community-maintained extension to the prototype NSPC engine
 }
 
 enum Interpolation {
@@ -156,5 +157,15 @@ ADSRGain konamiADSRGain(const ubyte[] parameters) nothrow pure @safe {
 	}
 	tmp.adsr |= (((parameters[1] % 30) + 2) | ((parameters[1] / 30) << 5)) << 8;
 	tmp.gain = parameters[2];
+	return tmp;
+}
+
+ADSRGain amkADSRGain(const ubyte[] parameters) nothrow pure @safe {
+	ADSRGain tmp;
+	if (parameters[0] == 0x80) {
+		tmp.gain = parameters[1];
+	} else {
+		tmp.adsr = (parameters[1] << 8) | parameters[0] | 0x80;
+	}
 	return tmp;
 }

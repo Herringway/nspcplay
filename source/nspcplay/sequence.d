@@ -59,7 +59,21 @@ enum VCMD {
 	konamiE7,
 	konamiF5,
 	konamiADSRGain,
+	// amk vcmds
+	amkSubloop,
+	amkSetADSRGain,
+	amkSampleLoad,
+	amkF4,
+	amkSetFIR,
+	amkWriteDSP,
+	amkEnableNoise,
+	amkSendData,
+	amkFA,
+	amkFB,
+	amkRemoteCommand,
 }
+
+enum ubyte variableLength = 255;
 
 // number of bytes following a Ex/Fx code
 private immutable ubyte[VCMD.max + 1] codeLength = [
@@ -102,6 +116,18 @@ private immutable ubyte[VCMD.max + 1] codeLength = [
 	VCMD.konamiE7: 1, // E7
 	VCMD.konamiF5: 3, // F5
 	VCMD.konamiADSRGain: 3, // FB
+	// amk vcmds
+	VCMD.amkSubloop: 1,//E6
+	VCMD.amkSetADSRGain: 2, //ED
+	VCMD.amkSampleLoad: 1,//F3
+	VCMD.amkF4: 1, // F4
+	VCMD.amkSetFIR: 8,//F5
+	VCMD.amkWriteDSP: 2,//F6
+	VCMD.amkEnableNoise: 1,//F8
+	VCMD.amkSendData: 2,//F9
+	VCMD.amkFA: 2,//FA
+	VCMD.amkFB: variableLength,//FB
+	VCMD.amkRemoteCommand: 4,//FC
 	// vcmds that don't actually do anything
 	VCMD.noop0: 0,
 	VCMD.noop1: 1,
@@ -133,6 +159,7 @@ VCMDClass getCommandClass(Variant variant, ubyte val, out ubyte base) nothrow @s
 				return VCMDClass.special;
 			}
 		case Variant.prototype:
+		case Variant.addmusick:
 			if (val == 0) {
 				return VCMDClass.terminator;
 			} else if (val < 0x80) {
@@ -263,6 +290,49 @@ VCMD getCommand(Variant variant, ubyte val) nothrow @safe pure {
 				case 0xF1: return VCMD.echoParameterSetup;
 				case 0xF2: return VCMD.echoVolumeFade;
 				case 0xF3: .. case 0xFF: return VCMD.invalid;
+				default: break;
+			}
+			break;
+		case Variant.addmusick:
+			switch (val) {
+				case 0xDA: return VCMD.instrument;
+				case 0xDB: return VCMD.panning;
+				case 0xDC: return VCMD.panningFade;
+				case 0xDD: return VCMD.pitchSlideToNote;
+				case 0xDE: return VCMD.vibratoOn;
+				case 0xDF: return VCMD.vibratoOff;
+				case 0xE0: return VCMD.songVolume;
+				case 0xE1: return VCMD.songVolumeFade;
+				case 0xE2: return VCMD.tempo;
+				case 0xE3: return VCMD.tempoFade;
+				case 0xE4: return VCMD.globalAbsoluteTransposition;
+				case 0xE5: return VCMD.tremoloOn;
+				case 0xE6: return VCMD.amkSubloop;
+				case 0xE7: return VCMD.volume;
+				case 0xE8: return VCMD.volumeFade;
+				case 0xE9: return VCMD.subRoutine;
+				case 0xEA: return VCMD.vibratoFadeIn;
+				case 0xEB: return VCMD.notePitchEnvelopeTo;
+				case 0xEC: return VCMD.notePitchEnvelopeFrom;
+				case 0xED: return VCMD.amkSetADSRGain;
+				case 0xEE: return VCMD.fineTune;
+				case 0xEF: return VCMD.echoEnableBitsAndVolume;
+				case 0xF0: return VCMD.echoOff;
+				case 0xF1: return VCMD.echoParameterSetup;
+				case 0xF2: return VCMD.echoVolumeFade;
+				case 0xF3: return VCMD.amkSampleLoad;
+				case 0xF4: return VCMD.amkF4;
+				case 0xF5: return VCMD.amkSetFIR;
+				case 0xF6: return VCMD.amkWriteDSP;
+				case 0xF7: return VCMD.invalid;
+				case 0xF8: return VCMD.amkEnableNoise;
+				case 0xF9: return VCMD.amkSendData;
+				case 0xFA: return VCMD.amkFA;
+				case 0xFB: return VCMD.amkFB;
+				case 0xFC: return VCMD.amkRemoteCommand;
+				case 0xFD: return VCMD.invalid;
+				case 0xFE: return VCMD.invalid;
+				case 0xFF: return VCMD.invalid;
 				default: break;
 			}
 			break;
@@ -438,6 +508,69 @@ struct Command {
 					case VCMD.fastForwardOff:
 						put(sink, "Fast forward disabled");
 						break;
+					case VCMD.amkSubloop:
+						if (parameters[0] == 0) {
+							put(sink, "Subloop start");
+						} else {
+							sink.formattedWrite!"Subloop: %s times"(parameters[0]);
+						}
+						break;
+					case VCMD.amkSetADSRGain:
+						sink.formattedWrite!"Set ADSR/gain: %s"(amkADSRGain(parameters));
+						break;
+					case VCMD.amkSampleLoad:
+						sink.formattedWrite!"Sample load: sample %s, pitch %s"(parameters[0], parameters[1]);
+						break;
+					case VCMD.amkF4:
+						switch (parameters[0]) {
+							case 0: put(sink, "Toggle yoshi drums on channel 5"); break;
+							case 1: put(sink, "Toggle legato"); break;
+							case 2: put(sink, "Toggle light staccato"); break;
+							case 3: put(sink, "Toggle channel echo"); break;
+							case 5: put(sink, "SNES sync"); break;
+							case 6: put(sink, "Toggle yoshi drums on current channel"); break;
+							case 7: put(sink, "Disable tempo hike"); break;
+							case 8: put(sink, "Use NSPC default velocity table"); break;
+							case 9: put(sink, "Restore instrument"); break;
+							default: sink.formattedWrite!"Unknown F4 subcommand: %02X"(parameters[0]); break;
+						}
+						break;
+					case VCMD.amkSetFIR:
+						sink.formattedWrite!"Set FIR coefficients: %(%02X %)"(parameters);
+						break;
+					case VCMD.amkWriteDSP:
+						sink.formattedWrite!"Write %02X to DSP register %02X"(parameters[1], parameters[0]);
+						break;
+					case VCMD.amkEnableNoise:
+						sink.formattedWrite!"Enable noise: %s"(parameters[0]);
+						break;
+					case VCMD.amkSendData:
+						sink.formattedWrite!"Send data to 65816: %04X"(parameters[0] | (parameters[1] << 8));
+						break;
+					case VCMD.amkFA:
+						switch (parameters[0]) {
+							case 0: sink.formattedWrite!"Enable pitch modulation: %08b"(parameters[1]); break;
+							case 1: sink.formattedWrite!"Enable gain: %02X"(parameters[1]); break;
+							case 2: sink.formattedWrite!"Semitone tune: %s"(parameters[1]); break;
+							case 3: sink.formattedWrite!"Amplify: %s"(parameters[1]); break;
+							case 4: sink.formattedWrite!"Echo buffer reserve: %s"(parameters[1]); break;
+							default: sink.formattedWrite!"Unknown FA subcommand: %02X %02X"(parameters[0], parameters[1]); break;
+						}
+						break;
+					case VCMD.amkFB:
+						if (parameters[0] < 0x80) {
+							sink.formattedWrite!"Arpeggio: duration: %s, notes: %(%s, %)"(parameters[1], parameters[2 .. $]);
+						} else {
+							switch (parameters[0]) {
+							case 0x80: sink.formattedWrite!"Trill: duration: %s, pitch change: %s"(parameters[1], parameters[2]); break;
+							case 0x81: sink.formattedWrite!"Glissando: duration: %s, semitones: %s"(parameters[1], parameters[2]); break;
+							default: sink.formattedWrite!"Unknown FB subcommand: %02X %02X %02X"(parameters[0], parameters[1], parameters[2]); break;
+						}
+						}
+						break;
+					case VCMD.amkRemoteCommand:
+						sink.formattedWrite!"Remote command: address: $%04X, event: %s, wait: %s"(parameters[0] | (parameters[1] << 8), parameters[2], parameters[3]);
+						break;
 					case VCMD.invalid:
 						put(sink, "Invalid command");
 						break;
@@ -460,7 +593,15 @@ Command readCommand(Variant variant, return scope const(ubyte)[] p, out size_t r
 		readBytes += p[1] < 0x80;
 	} else if (command.type == VCMDClass.special) {
 		command.special = getCommand(variant, p[0]);
-		readBytes += codeLength[command.special];
+		if (command.special == VCMD.amkFB) {
+			if (p[1] < 0x80) {
+				readBytes += p[1] + 1;
+			} else {
+				readBytes += 2;
+			}
+		} else {
+			readBytes += codeLength[command.special];
+		}
 	}
 	command.parameters = p[1 .. readBytes];
 	command.raw = p[0 .. readBytes];

@@ -26,8 +26,9 @@ enum PhraseType {
 struct NSPCFileHeader {
 	align(1):
 	static union Extra {
-		struct { //Variant.prototype
+		struct { //Variant.prototype, addmusick
 			ushort percussionBase;
+			ushort customInstruments; //addmusick only
 		}
 		ubyte[19] reserved;
 	}
@@ -484,6 +485,11 @@ private void processInstruments(ref Song song, scope const ubyte[] buffer, const
 			song.instruments ~= cast(Instrument)percussion;
 			song.percussionNotes[idx] = cast(ubyte)(percussion.note - 0x80);
 		}
+	} else if (song.variant == Variant.addmusick) {
+		song.instruments = cast(const(Instrument)[])(buffer[header.instrumentBase .. header.instrumentBase + 19 * Instrument.sizeof]);
+		song.instruments.length = 30; //custom instruments start at 30
+		song.instruments ~= cast(const(Instrument)[])(buffer[header.extra.customInstruments .. header.extra.customInstruments + (maxInstruments - 19) * Instrument.sizeof]);
+		song.percussionNotes = 0x24;
 	} else {
 		song.instruments = cast(const(Instrument)[])(buffer[header.instrumentBase .. header.instrumentBase + maxInstruments * Instrument.sizeof]);
 		song.percussionNotes = 0x24;
