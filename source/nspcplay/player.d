@@ -371,8 +371,9 @@ struct NSPCPlayer {
 					}
 					if (offset < channel.sample.data.length) {
 						interpolationSample = channel.sample.data[offset];
-					} else {
+					} else if (channel.sample.data) {
 						interpolationSample = channel.interpolationBuffer[idx - 1];
+					} else { //no sample data?
 					}
 				}
 				int s1 = channel.lastSample = interpolate(interpolation, channel.interpolationBuffer[], channel.samplePosition >> 3);
@@ -432,9 +433,11 @@ struct NSPCPlayer {
 	}
 
 	private void makeSlider(ref Slider s, int cycles, int target) nothrow pure @safe {
-		s.delta = cast(ushort)(((target << 8) - (s.current & 0xFF00)) / cycles);
-		s.cycles = cast(ubyte) cycles;
-		s.target = cast(ubyte) target;
+		if (cycles) {
+			s.delta = cast(ushort)(((target << 8) - (s.current & 0xFF00)) / cycles);
+			s.cycles = cast(ubyte) cycles;
+			s.target = cast(ubyte) target;
+		}
 	}
 
 	private void setInstrument(ref SongState st, ref ChannelState c, size_t instrument) nothrow pure @safe {
@@ -691,7 +694,7 @@ struct NSPCPlayer {
 			c.tremoloStartCounter = 0;
 
 			c.samplePosition = 0;
-			c.sample = currentSong.samples[c.sampleOverride.get(currentSong.instruments[c.instrument].sampleID)];
+			c.sample = currentSong.samples[c.sampleOverride.get(currentSong.instruments[c.instrument].sampleID) & 0x7F];
 			c.gain = 0;
 			c.setADSRPhase((currentSong.instruments[c.instrument].adsrGain.mode == ADSRGainMode.adsr) ? ADSRPhase.attack : ADSRPhase.gain);
 

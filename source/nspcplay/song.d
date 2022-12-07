@@ -152,9 +152,11 @@ struct Song {
 	private void validateInstrument(size_t id) @safe {
 		enforce!NSPCException(id < instruments.length, format!"Invalid instrument %s - Index out of bounds"(id));
 		const idata = instruments[id];
-		enforce!NSPCException(samples[idata.sampleID].isValid, format!"Invalid instrument %s - Invalid sample %s"(id, idata.sampleID));
-		if (idata.tuning == 0) {
-			tracef("Suspicious instrument %s - no tuning (will be silent)", id);
+		if (idata.sampleID < 0x7F) {
+			enforce!NSPCException(samples[idata.sampleID].isValid, format!"Invalid instrument %s - Invalid sample %s"(id, idata.sampleID));
+			if (idata.tuning == 0) {
+				tracef("Suspicious instrument %s - no tuning (will be silent)", id);
+			}
 		}
 	}
 	private void validateTrack(scope const ubyte[] track, bool isSub, ref ubyte tmpPercussionBase) @safe {
