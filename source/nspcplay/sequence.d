@@ -119,7 +119,7 @@ private immutable ubyte[VCMD.max + 1] codeLength = [
 	// amk vcmds
 	VCMD.amkSubloop: 1,//E6
 	VCMD.amkSetADSRGain: 2, //ED
-	VCMD.amkSampleLoad: 1,//F3
+	VCMD.amkSampleLoad: 2,//F3
 	VCMD.amkF4: 1, // F4
 	VCMD.amkSetFIR: 8,//F5
 	VCMD.amkWriteDSP: 2,//F6

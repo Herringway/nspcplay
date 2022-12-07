@@ -86,6 +86,8 @@ struct Song {
 	const(ubyte)[][ushort] tracks;
 	const(ubyte[8])[] firCoefficients;
 	ubyte[8] releaseTable;
+	/// Alternative release table to use when switch command is used (AMK)
+	ubyte[8] altReleaseTable;
 	ubyte[16] volumeTable;
 	Variant variant;
 	const(Instrument)[] instruments;
@@ -331,6 +333,9 @@ Song loadNSPCFile(const(ubyte)[] data) @safe {
 	assert(header.releaseTable < releaseTables.length, "Invalid release table");
 	song.volumeTable = volumeTables[header.volumeTable];
 	song.releaseTable = releaseTables[header.releaseTable];
+	if (song.variant == Variant.addmusick) {
+		song.altReleaseTable = releaseTables[0]; // AMK allows the 'default' release table to be used as well
+	}
 	debug(nspclogging) tracef("Release table: %s, volume table: %s", header.releaseTable, header.volumeTable);
 	const remaining = loadAllSubpacks(buffer[], data[NSPCFileHeader.sizeof .. $]);
 	processInstruments(song, buffer, header);

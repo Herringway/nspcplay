@@ -9,6 +9,7 @@ import std.algorithm.comparison;
 import std.exception;
 import std.experimental.logger;
 import std.format;
+import std.typecons;
 
 enum uint nativeSamplingRate = 32000;
 
@@ -39,6 +40,8 @@ private struct SongState {
 	ubyte[8] firCoefficients;
 	short[8] firLeft;
 	short[8] firRight;
+	//amk state
+	bool useAltRTable;
 }
 
 private struct Slider {
@@ -127,6 +130,11 @@ private struct ChannelState {
 	ushort loopCount;
 	ubyte noteDelta; //TODO: implement this. what unit does this use?
 	ubyte volumeDelta; //ditto
+	// AMK specific state
+	Nullable!ubyte sampleOverride;
+	Nullable!ushort tuningOverride;
+	ushort semitoneTune;
+	ubyte volumeBoost;
 	void setADSRPhase(ADSRPhase phase) @safe pure nothrow {
 		adsrCounter = 0;
 		adsrPhase = phase;
@@ -411,6 +419,7 @@ struct NSPCPlayer {
 		const ubyte[] ph = panTable[pan >> 8 .. (pan >> 8) + 2];
 		int v = ph[0] + ((ph[1] - ph[0]) * (pan & 255) >> 8);
 		v = v * c.totalVolume >> 8;
+		v += v * c.volumeBoost >> 8;
 		if (c.panFlags & flag) {
 			v = -v;
 		}
@@ -432,6 +441,8 @@ struct NSPCPlayer {
 		const idata = currentSong.instruments[instrument];
 		c.instrument = cast(ubyte) instrument;
 		setADSRGain(c, idata.adsrGain);
+		c.sampleOverride.nullify();
+		c.tuningOverride.nullify();
 	}
 	private void setADSRGain(ref ChannelState c, const ADSRGain adsrGain) nothrow pure @safe {
 		c.instrumentADSRGain = adsrGain;
@@ -464,7 +475,7 @@ struct NSPCPlayer {
 		freq >>= 6 - octave;
 
 
-		freq *= currentSong.instruments[c.instrument].tuning;
+		freq *= c.tuningOverride.get(currentSong.instruments[c.instrument].tuning);
 		freq >>= 8;
 		freq &= 0x3fff;
 
@@ -612,23 +623,49 @@ struct NSPCPlayer {
 			case VCMD.amkSetFIR:
 				st.firCoefficients = command.parameters;
 				break;
+			case VCMD.amkSampleLoad:
+				c.sampleOverride = command.parameters[0];
+				c.tuningOverride = cast(ushort)command.parameters[1] << 8;
+				break;
 			case VCMD.amkF4:
 				if (command.parameters[0] == 9) {
 					setInstrument(st, c, c.instrument);
 					break;
 				}
-				goto case;
+				debug(nspclogging) warningf("Unhandled command: %x", command);
+				break;
+			case VCMD.amkFA:
+				if (command.parameters[0] == 1) {
+					auto newGain = c.instrumentADSRGain;
+					newGain.gain = command.parameters[1];
+					newGain.adsr &= ~0x80;
+					debug tracef("Setting gain: %s", newGain);
+					setADSRGain(c, newGain);
+					break;
+				}
+				if (command.parameters[0] == 2) {
+					c.semitoneTune = command.parameters[1];
+					break;
+				}
+				if (command.parameters[0] == 3) {
+					c.volumeBoost = command.parameters[1];
+					break;
+				}
+				if (command.parameters[0] == 6) {
+					st.useAltRTable = !!command.parameters[1];
+					break;
+				}
+				debug(nspclogging) warningf("Unhandled command: %x", command);
+				break;
 			case VCMD.konamiE4: // ???
 			case VCMD.konamiE7: // ???
 			case VCMD.konamiF5: // ???
 			case VCMD.channelMute:
 			case VCMD.fastForwardOn:
 			case VCMD.fastForwardOff:
-			case VCMD.amkSampleLoad:
 			case VCMD.amkWriteDSP:
 			case VCMD.amkEnableNoise:
 			case VCMD.amkSendData:
-			case VCMD.amkFA:
 			case VCMD.amkFB:
 			case VCMD.amkRemoteCommand:
 				debug(nspclogging) warningf("Unhandled command: %x", command);
@@ -654,11 +691,11 @@ struct NSPCPlayer {
 			c.tremoloStartCounter = 0;
 
 			c.samplePosition = 0;
-			c.sample = currentSong.samples[currentSong.instruments[c.instrument].sampleID];
+			c.sample = currentSong.samples[c.sampleOverride.get(currentSong.instruments[c.instrument].sampleID)];
 			c.gain = 0;
 			c.setADSRPhase((currentSong.instruments[c.instrument].adsrGain.mode == ADSRGainMode.adsr) ? ADSRPhase.attack : ADSRPhase.gain);
 
-			note += st.transpose + c.transpose;
+			note += st.transpose + c.transpose + c.semitoneTune;
 			c.note.current = cast(ushort)(note << 8 | c.finetune);
 
 			c.note.cycles = c.portLength;
@@ -697,7 +734,8 @@ struct NSPCPlayer {
 			// if the note will be continued, don't release yet
 			rel = c.noteLength;
 		} else {
-			rel = (c.noteLength * currentSong.releaseTable[c.noteStyle >> 4]) >> 8;
+			const releaseTable = st.useAltRTable ? currentSong.altReleaseTable : currentSong.releaseTable;
+			rel = (c.noteLength * releaseTable[c.noteStyle >> 4]) >> 8;
 			if (rel > c.noteLength - 2) {
 				rel = c.noteLength - 2;
 			}
