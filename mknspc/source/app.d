@@ -37,6 +37,7 @@ int main(string[] args) {
 
 const(ubyte)[] buildNSPCFromSPC(string[] args, out string filename) {
 	NSPCFileHeader header;
+	bool autodetect;
 	void handleIntegers(string opt, string value) {
 		ushort val;
 		if (value.startsWith("0x")) {
@@ -66,6 +67,7 @@ const(ubyte)[] buildNSPCFromSPC(string[] args, out string filename) {
 		}
 	}
 	auto helpInfo = getopt(args,
+		"d|autodetect", "Try autodetecting some addresses", &autodetect,
 		"o|output", "Filename to write to (defaults to filename.nspc)", &filename,
 		"s|songaddress", "Address of song data", &handleIntegers,
 		"a|sampleaddress", "Address of sample data", &handleIntegers,
@@ -82,10 +84,29 @@ const(ubyte)[] buildNSPCFromSPC(string[] args, out string filename) {
 		filename = args[1].baseName.withExtension(".nspc").text;
 	}
 	auto spcFile = cast(ubyte[])read(args[1]);
-	if (header.sampleBase == 0) {
+	if (autodetect) {
 		const sampleDirectory = spcFile[0x1015D];
 		infof("Using auto-detected sample directory: %04X", sampleDirectory << 8);
 		header.sampleBase = sampleDirectory << 8;
+	}
+	if (autodetect) {
+		if (spcFile.isAMK) {
+			infof("Detected AddMusicK song");
+			header.variant = nspcplay.Variant.addmusick;
+			const songTableAddress = spcFile.find(amkPreTable)[amkPreTable.length .. $];
+			const tableAddr = (cast(const(ushort)[])(songTableAddress[0 .. 2]))[0] + 2 + 0x100 + 18;
+			infof("Detected song table: %04X", tableAddr - 0x100);
+			header.songBase = (cast(const(ushort)[])spcFile[tableAddr .. tableAddr + 2])[0];
+			header.instrumentBase = 0x1844;
+			infof("Detected song address: %04X", header.songBase);
+			const songStartData = spcFile[header.songBase + 0x100 .. $];
+			ushort customInstrumentBase = 0;
+			while(songStartData[customInstrumentBase .. customInstrumentBase + 2] != [0xFF, 0x00]) {
+				customInstrumentBase += 2;
+			}
+			header.extra.customInstruments = cast(ushort)((cast(const(ushort)[])songStartData[customInstrumentBase + 2 .. customInstrumentBase  + 4])[0] + 6);
+			infof("Detected custom instruments: %04X", header.extra.customInstruments);
+		}
 	}
 	Appender!(const(ubyte)[]) buf;
 	buf ~= HeaderBytes(header).raw[];
@@ -163,4 +184,10 @@ const(ubyte)[] buildNSPCFromPackfiles(string[] args, out string filename) {
 
 bool inRange(T)(T val, T lower, T upper) {
 	return (val >= lower) && (val < upper);
+}
+
+enum amkPreTable = [0xFA, 0x8F, 0x02, 0x6B, 0x8F, 0x02, 0x0C, 0xAE, 0x1C, 0xFD, 0xF6];
+
+bool isAMK(const ubyte[] data) @safe pure {
+	return data[0x500 .. 0x510] == [0x20, 0xCD, 0xCF, 0xBD, 0xE8, 0x00, 0x8D, 0x00, 0xD6, 0x00, 0x01, 0xFE, 0xFB, 0xD6, 0x00, 0x02];
 }
