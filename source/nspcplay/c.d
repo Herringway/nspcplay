@@ -14,8 +14,7 @@ version(unittest) {} else {
 export nothrow extern(C):
 
 NSPCPlayer* nspcplayNew(int sampleRate) {
-	NSPCPlayer* player = theAllocator.make!NSPCPlayer();
-	player.initialize(sampleRate);
+	NSPCPlayer* player = theAllocator.make!NSPCPlayer(sampleRate);
 	return player;
 }
 

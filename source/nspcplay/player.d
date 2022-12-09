@@ -341,7 +341,8 @@ struct NSPCPlayer {
 		enum left = 0;
 		enum right = 1;
 		if (!songPlaying) {
-			return [];
+			buffer[] = [0, 0];
+			return buffer;
 		}
 		size_t length;
 		foreach (ref sample; buffer) {
@@ -996,14 +997,12 @@ struct NSPCPlayer {
 		}
 		state.tempo.current = currentSong.defaultTempo << 8;
 	}
-	void initialize(int sampleRate) nothrow pure @safe {
-		initialize();
+	this(int sampleRate) nothrow pure @safe {
 		mixrate = sampleRate;
 	}
 
 	/// Start playing music
 	void play() @safe pure nothrow {
-		initialize(mixrate);
 		songPlaying = true;
 	}
 	void stop() @safe pure nothrow {

@@ -90,15 +90,21 @@ int main(string[] args) {
 	auto filePath = args[1];
 	auto file = cast(ubyte[])read(args[1]);
 
-	NSPCPlayer nspc;
+	auto nspc = NSPCPlayer(sampleRate);
 	// initialization
-	trace("Initializing NSPC");
-	nspc.initialize(sampleRate);
+	if (channelsEnabled.length != 8) {
+		stderr.writeln("Channel string must be exactly 8 characters long!");
+		return 1;
+	}
+	foreach (idx, channel; channelsEnabled) {
+		nspc.setChannelEnabled(cast(ubyte)idx, channel != '0');
+	}
 
 	trace("Loading NSPC file");
 	// Load files
 	auto song = loadNSPCFile(file);
 	nspc.loadSong(song);
+	nspc.setSpeed(speed);
 
 	nspc.interpolation = interpolation;
 	if (replaceSamples != "") {
@@ -134,15 +140,6 @@ int main(string[] args) {
 	nspc.play();
 	trace("Playing NSPC music");
 
-	if (channelsEnabled.length != 8) {
-		stderr.writeln("Channel string must be exactly 8 characters long!");
-		return 1;
-	}
-	foreach (idx, channel; channelsEnabled) {
-		nspc.setChannelEnabled(cast(ubyte)idx, channel != '0');
-	}
-
-	nspc.setSpeed(speed);
 
 	if (!dumpBRRFiles && (outfile != "")) {
 		dumpWav(nspc, sampleRate, channels, outfile);
