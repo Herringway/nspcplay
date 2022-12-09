@@ -225,6 +225,12 @@ struct Song {
 		}
 		return 0x20;
 	}
+	package ubyte defaultEnabledChannels() const @safe pure nothrow {
+		if (variant.among(Variant.prototype, Variant.addmusick)) {
+			return 0b11011111;
+		}
+		return 0b11111111;
+	}
 	void toString(S)(ref S sink) const {
 		import std.format : formattedWrite;
 		import std.range : put;

@@ -996,6 +996,10 @@ struct NSPCPlayer {
 			songPlaying = false;
 		}
 		state.tempo.current = currentSong.defaultTempo << 8;
+		foreach (channel; 0 ..8) {
+			// disable any channels that are disabled by default
+			state.channels[channel].enabled ^= !(currentSong.defaultEnabledChannels() & (1 << channel));
+		}
 	}
 	this(int sampleRate) nothrow pure @safe {
 		mixrate = sampleRate;
