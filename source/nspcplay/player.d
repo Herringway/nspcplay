@@ -28,7 +28,6 @@ private struct SongState {
 	ubyte targetEchoVolumeLeft;
 	ubyte targetEchoVolumeRight;
 	bool echoWrites;
-	ubyte echoOn;
 	ubyte echoRemaining = 1;
 	ubyte echoVolumeLeft;
 	ubyte echoVolumeRight;
@@ -124,6 +123,8 @@ private struct ChannelState {
 
 	short[8] interpolationBuffer;
 	short lastSample;
+
+	bool echoEnabled;
 
 	// Konami-specific state
 	ushort loopStart;
@@ -297,7 +298,7 @@ void doEcho(ref SongState state, ref short leftSample, ref short rightSample, in
 	int inLeft = 0;
 	int inRight = 0;
 	for(int i = 0; i < 8; i++) {
-		if(state.echoOn & (1 << i)) {
+		if(state.channels[i].echoEnabled) {
 			inLeft += cast(short)((state.channels[i].lastSample * state.channels[i].leftVolume) / 128.0);
 			inRight += cast(short)((state.channels[i].lastSample * state.channels[i].rightVolume) / 128.0);
 			inLeft = clamp(inLeft, short.min, short.max);
@@ -581,12 +582,16 @@ struct NSPCPlayer {
 				c.finetune = command.parameters[0];
 				break;
 			case VCMD.echoEnableBitsAndVolume:
-				st.echoOn = command.parameters[0];
+				foreach (idx, ref channel; st.channels) {
+					channel.echoEnabled = !!(command.parameters[0] & (1 << idx));
+				}
 				st.echoVolumeLeft = command.parameters[1];
 				st.echoVolumeRight = command.parameters[2];
 				break;
 			case VCMD.echoOff:
-				st.echoOn = 0;
+				foreach (ref channel; st.channels) {
+					channel.echoEnabled = false;
+				}
 				break;
 			case VCMD.echoParameterSetup:
 				st.echoDelay = command.parameters[0];
