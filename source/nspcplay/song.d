@@ -212,7 +212,7 @@ struct Song {
 			id -= percussionID(variant);
 		}
 		if (percussion) {
-			id += base + percussionBase;
+			id += base;
 		}
 		return id;
 	}
