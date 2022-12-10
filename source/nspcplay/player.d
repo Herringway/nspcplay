@@ -41,6 +41,7 @@ private struct SongState {
 	short[8] firRight;
 	//amk state
 	bool useAltRTable;
+	bool enchantedReadahead = false;
 }
 
 private struct Slider {
@@ -178,7 +179,7 @@ private struct Parser {
 		bool _;
 		return popCommand(song, _);
 	}
-	Command popCommand(const Song song, out bool done) nothrow @safe pure {
+	Command popCommand(const Song song, out bool done, bool followSubroutines = true) nothrow @safe pure {
 		size_t nextOffset;
 		const command = readCommand(song.variant, sequenceData, nextOffset);
 		if (command.type == VCMDClass.terminator) {
@@ -216,7 +217,7 @@ private struct Parser {
 				loopCount = 0xFF;
 				sequenceData = sequenceData[nextOffset .. $];
 			}
-		} else if ((command.type == VCMDClass.special) && (command.special == VCMD.subRoutine)) {
+		} else if (followSubroutines && (command.type == VCMDClass.special) && (command.special == VCMD.subRoutine)) {
 			subroutineReturnData = sequenceData[nextOffset .. $];
 			subroutineStartAddress = read!ushort(command.parameters);
 			subroutineCount = command.parameters[2];
@@ -730,7 +731,7 @@ struct NSPCPlayer {
 			auto p = c.parser;
 			bool done;
 			while (!done) {
-				const tmpCommand = p.popCommand(currentSong, done);
+				const tmpCommand = p.popCommand(currentSong, done, st.enchantedReadahead);
 				if (tmpCommand.type.among(VCMDClass.note, VCMDClass.tie, VCMDClass.rest, VCMDClass.percussion)) {
 					nextNote = tmpCommand.type;
 					break;

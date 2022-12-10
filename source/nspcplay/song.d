@@ -225,6 +225,9 @@ struct Song {
 		}
 		return 0x20;
 	}
+	package bool defaultEnchantedReadahead() const @safe pure nothrow {
+		return !variant.among(Variant.prototype, Variant.addmusick);
+	}
 	package ubyte defaultEnabledChannels() const @safe pure nothrow {
 		if (variant.among(Variant.prototype, Variant.addmusick)) {
 			return 0b11011111;
