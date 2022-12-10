@@ -92,6 +92,11 @@ int main(string[] args) {
 
 	auto nspc = NSPCPlayer(sampleRate);
 	// initialization
+
+	trace("Loading NSPC file");
+	// Load files
+	auto song = loadNSPCFile(file);
+	nspc.loadSong(song);
 	if (channelsEnabled.length != 8) {
 		stderr.writeln("Channel string must be exactly 8 characters long!");
 		return 1;
@@ -99,11 +104,6 @@ int main(string[] args) {
 	foreach (idx, channel; channelsEnabled) {
 		nspc.setChannelEnabled(cast(ubyte)idx, channel != '0');
 	}
-
-	trace("Loading NSPC file");
-	// Load files
-	auto song = loadNSPCFile(file);
-	nspc.loadSong(song);
 	nspc.setSpeed(speed);
 
 	nspc.interpolation = interpolation;
