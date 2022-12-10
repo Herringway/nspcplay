@@ -137,6 +137,7 @@ private struct ChannelState {
 	Nullable!ushort tuningOverride;
 	ushort semitoneTune;
 	ubyte volumeBoost;
+	ushort[ubyte] remotes;
 	void setADSRPhase(ADSRPhase phase) @safe pure nothrow {
 		adsrCounter = 0;
 		adsrPhase = phase;
@@ -635,9 +636,13 @@ struct NSPCPlayer {
 				break;
 			case VCMD.amkSampleLoad:
 				c.sampleOverride = command.parameters[0];
-				c.tuningOverride = cast(ushort)command.parameters[1] << 8;
+				c.tuningOverride = (cast(ushort)command.parameters[1] << 8) | cast(ubyte)currentSong.instruments[c.instrument].tuning;
 				break;
 			case VCMD.amkF4:
+				if (command.parameters[0] == 3) {
+					c.echoEnabled = !c.echoEnabled;
+					break;
+				}
 				if (command.parameters[0] == 9) {
 					setInstrument(st, c, c.instrument);
 					break;
@@ -649,7 +654,6 @@ struct NSPCPlayer {
 					auto newGain = c.instrumentADSRGain;
 					newGain.gain = command.parameters[1];
 					newGain.adsr &= ~0x80;
-					debug tracef("Setting gain: %s", newGain);
 					setADSRGain(c, newGain);
 					break;
 				}
@@ -661,11 +665,22 @@ struct NSPCPlayer {
 					c.volumeBoost = command.parameters[1];
 					break;
 				}
+				if (command.parameters[0] == 4) {
+					// reserves echo buffer, which we don't need to do
+					break;
+				}
 				if (command.parameters[0] == 6) {
 					st.useAltRTable = !!command.parameters[1];
 					break;
 				}
 				debug(nspclogging) warningf("Unhandled command: %x", command);
+				break;
+			case VCMD.amkRemoteCommand:
+				if (command.parameters[2] == 0) {
+					c.remotes = null;
+				} else {
+					c.remotes[command.parameters[2]] = read!ushort(command.parameters[]);
+				}
 				break;
 			case VCMD.konamiE4: // ???
 			case VCMD.konamiE7: // ???
@@ -677,7 +692,6 @@ struct NSPCPlayer {
 			case VCMD.amkEnableNoise:
 			case VCMD.amkSendData:
 			case VCMD.amkFB:
-			case VCMD.amkRemoteCommand:
 				debug(nspclogging) warningf("Unhandled command: %x", command);
 				break;
 			case VCMD.invalid: //do nothing
@@ -688,6 +702,7 @@ struct NSPCPlayer {
 	// $0654 + $08D4-$8EF
 	private void doNote(ref SongState st, ref ChannelState c, const Command command) nothrow pure @safe {
 		ubyte note = command.note;
+		executeRemote(255, c, st);
 		// using >=CA as a note switches to that instrument and plays a predefined note
 		if (command.type == VCMDClass.percussion) {
 			setInstrument(st, c, currentSong.absoluteInstrumentID(note, st.percussionBase, true));
@@ -808,6 +823,7 @@ struct NSPCPlayer {
 		}
 		if (!c.noteRelease) {
 			c.setADSRPhase(ADSRPhase.release);
+			executeRemote(3, c, state);
 		}
 
 		// sweep
@@ -842,43 +858,59 @@ struct NSPCPlayer {
 			}
 		}
 	}
+	bool inRemote = false;
+	private void executeRemote(ubyte event, ref ChannelState channel, ref SongState song) nothrow pure @safe {
+		assert(!inRemote);
+		if (auto seq = event in channel.remotes) {
+			inRemote = true;
+			Parser parser;
+			parser.sequenceData = currentSong.tracks[*seq];
+			parser.subroutineCount = 0;
+			execute(parser, channel, song);
+			inRemote = false;
+		}
+	}
+	private bool execute(ref Parser parser, ref ChannelState channel, ref SongState song) nothrow pure @safe {
+		while (1) {
+			bool done;
+			const command = parser.popCommand(currentSong, done);
+			final switch (command.type) {
+				case VCMDClass.terminator:
+					if (done) {
+						return false;
+					}
+					break;
+				case VCMDClass.noteDuration:
+					channel.noteLength = command.noteDuration;
+					if (command.parameters.length > 0) {
+						channel.noteStyle = command.parameters[0];
+					}
+					break;
+				case VCMDClass.note:
+				case VCMDClass.tie:
+				case VCMDClass.rest:
+				case VCMDClass.percussion:
+					channel.next = channel.noteLength - 1;
+					doNote(song, channel, command);
+					return true;
+				case VCMDClass.special:
+					doCommand(song, channel, command);
+					break;
+			}
+		}
+	}
 
 	// $07F9 + $0625
 	private bool doCycle(ref SongState st) nothrow pure @safe {
 		foreach (ref channel; st.channels) {
 			if (channel.parser.sequenceData == null) {
-				continue; //8F0
+				continue;
 			}
-
 			if (--channel.next >= 0) {
 				doKeySweepVibratoChecks(channel);
 			} else {
-				loop: while (1) {
-					bool done;
-					const command = channel.parser.popCommand(currentSong, done);
-					final switch (command.type) {
-						case VCMDClass.terminator:
-							if (done) {
-								return false;
-							}
-							break;
-						case VCMDClass.noteDuration:
-							channel.noteLength = command.noteDuration;
-							if (command.parameters.length > 0) {
-								channel.noteStyle = command.parameters[0];
-							}
-							break;
-						case VCMDClass.note:
-						case VCMDClass.tie:
-						case VCMDClass.rest:
-						case VCMDClass.percussion:
-							channel.next = channel.noteLength - 1;
-							doNote(st, channel, command);
-							break loop;
-						case VCMDClass.special:
-							doCommand(st, channel, command);
-							break;
-					}
+				if (!execute(channel.parser, channel, st)) {
+					return false;
 				}
 			}
 			// $0B84

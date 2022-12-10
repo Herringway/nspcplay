@@ -1,6 +1,6 @@
 module nspcplay.song;
 
-import std.algorithm.comparison : max, min;
+import std.algorithm.comparison : among, max, min;
 import std.algorithm.sorting : sort;
 import std.algorithm.searching : canFind;
 import std.exception : enforce;
@@ -476,6 +476,10 @@ private const(ubyte)[] decompileTrack(immutable(ubyte)[] data, ushort start, ref
 			enforce!NSPCException(recurse, "Subroutines can't call subroutines!");
 			ushort subPtr = read!ushort(command.parameters);
 
+			song.tracks.require(subPtr, decompileTrack(data, subPtr, song, tmpPercussionBase, false));
+		}
+		if (command.special == VCMD.amkRemoteCommand) { //also decompile 'remotes'
+			ushort subPtr = read!ushort(command.parameters);
 			song.tracks.require(subPtr, decompileTrack(data, subPtr, song, tmpPercussionBase, false));
 		}
 	}
