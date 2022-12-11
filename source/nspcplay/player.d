@@ -1038,6 +1038,7 @@ struct NSPCPlayer {
 			// disable any channels that are disabled by default
 			state.channels[channel].enabled ^= !(currentSong.defaultEnabledChannels() & (1 << channel));
 		}
+		state.enchantedReadahead = currentSong.defaultEnchantedReadahead;
 	}
 	this(int sampleRate) nothrow pure @safe {
 		mixrate = sampleRate;
