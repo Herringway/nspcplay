@@ -1,6 +1,7 @@
 import nspcplay;
 
 import std.algorithm.comparison;
+import std.algorithm.iteration;
 import std.algorithm.searching;
 import std.conv;
 import std.digest : toHexString;
@@ -64,6 +65,7 @@ int main(string[] args) {
 	bool printSong;
 	bool dumpBRRFiles;
 	string channelsEnabled = "11111111";
+	string phraseString;
 	Interpolation interpolation;
 	if (args.length < 2) {
 		return 1;
@@ -78,6 +80,7 @@ int main(string[] args) {
 		"o|outfile", "Dumps output to file", &outfile,
 		"r|replacesamples", "Replaces built-in samples with samples found in directory", &replaceSamples,
 		"v|verbose", "Print more verbose information", &verbose,
+		"z|phrases", "Override phrase list with custom one", &phraseString,
 		"s|speed", "Sets playback speed (500 is default)", &speed);
 	if (help.helpWanted) {
 		defaultGetoptPrinter("NSPC player", help.options);
@@ -95,7 +98,11 @@ int main(string[] args) {
 
 	trace("Loading NSPC file");
 	// Load files
-	auto song = loadNSPCFile(file);
+	ushort[] phrases;
+	foreach (phrasePortion; phraseString.splitter(",")) {
+		phrases ~= phrasePortion.to!ushort(16);
+	}
+	auto song = loadNSPCFile(file, phrases);
 	nspc.loadSong(song);
 	if (channelsEnabled.length != 8) {
 		stderr.writeln("Channel string must be exactly 8 characters long!");

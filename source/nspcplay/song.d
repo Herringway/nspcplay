@@ -106,7 +106,8 @@ struct Song {
 	private void loadSequence(const(ubyte)[] data, ushort base) @safe {
 		ubyte[65536] buffer;
 		loadAllSubpacks(buffer, data);
-		decompileSong(buffer[], this, base);
+		order = decompilePhrases(buffer[], base);
+		decompileSong(buffer[], this);
 	}
 	/// Load instruments from provided packs at the given addresses
 	void loadInstruments(const(ubyte)[][] packs, ushort instrumentBase, ushort sampleBase) @safe {
@@ -334,7 +335,7 @@ private const(ubyte)[] loadAllSubpacks(scope ubyte[] buffer, const(ubyte)[] pack
 	return pack[2 .. $];
 }
 /// Load an NSPC file
-Song loadNSPCFile(const(ubyte)[] data) @safe {
+Song loadNSPCFile(const(ubyte)[] data, ushort[] phrases = []) @safe {
 	Song song;
 	ubyte[65536] buffer;
 	auto header = read!NSPCFileHeader(data);
@@ -355,14 +356,12 @@ Song loadNSPCFile(const(ubyte)[] data) @safe {
 	} else {
 		song.firCoefficients = cast(const(ubyte[8])[])remaining[0 .. 8 * header.firCoefficientTableCount];
 	}
-	decompileSong(buffer[], song, header.songBase);
+	song.order = phrases == null ? decompilePhrases(buffer[], header.songBase) : interpretPhrases(phrases, header.songBase);
+	decompileSong(buffer[], song);
 	debug(nspclogging) tracef("FIR coefficients: %s", song.firCoefficients);
 	return song;
 }
-private void decompileSong(scope ubyte[] data, ref Song song, int startAddress) @safe {
-	immutable copyData = data.idup;
-	song.address = cast(ushort) startAddress;
-
+private Phrase[] decompilePhrases(scope ubyte[] data, ushort startAddress) @safe {
 	// Get order length and repeat info (at this point, we don't know how
 	// many patterns there are, so the pattern pointers aren't validated yet)
 	const ushort[] wpO = cast(ushort[]) data[startAddress .. $ -  ($ - startAddress) % 2];
@@ -382,15 +381,19 @@ private void decompileSong(scope ubyte[] data, ref Song song, int startAddress) 
 		phraseCount++;
 		index++;
 	}
+	enforce!NSPCException(phraseCount > 0, "No phrases in song");
+	return interpretPhrases(wpO[0 .. index + 1], startAddress);
+}
+private Phrase[] interpretPhrases(const scope ushort[] addresses, ushort startAddress) @safe {
 	ushort phraseID(ushort address) {
 		ushort id;
 		const offset = (address - startAddress) >> 1;
 		uint o;
 		bool skip;
-		while ((o < offset) && (wpO[o] != 0)) {
-			if (wpO[o] < 0x80) {
+		while ((o < offset) && (addresses[o] != 0)) {
+			if (addresses[o] < 0x80) {
 				skip = true;
-			} else if ((wpO[o] > 0x81) && (wpO[o] < 0x100)) {
+			} else if ((addresses[o] > 0x81) && (addresses[o] < 0x100)) {
 				skip = true;
 			}
 			if (!skip) {
@@ -402,39 +405,35 @@ private void decompileSong(scope ubyte[] data, ref Song song, int startAddress) 
 		}
 		return id;
 	}
-	enforce!NSPCException(phraseCount > 0, "No phrases in song");
-	auto newPhrases = new Phrase[](phraseCount + 1);
-	index++;
-
-	const fpIndex = index;
-	const firstPattern = startAddress + index * 2;
-
-	const phrases = wpO[0 .. index];
-	// Now the number of patterns is known, so go back and get the order
-	size_t idx;
-	foreach (ref order; newPhrases) {
-		if (phrases[idx] == 0) {
-			order.type = PhraseType.end;
-		} else if (phrases[idx] == 0x80) {
-			order.type = PhraseType.fastForwardOn;
-		} else if (phrases[idx] == 0x81) {
-			order.type = PhraseType.fastForwardOff;
-		} else if (phrases[idx] < 0x80) {
-			order.type = PhraseType.jumpLimited;
-			order.jumpTimes = phrases[idx];
+	Phrase[] newPhrases;
+	newPhrases.reserve(addresses.length);
+	for (size_t idx = 0; idx < addresses.length; idx++) {
+		Phrase newPhrase;
+		if (addresses[idx] == 0) {
+			newPhrase.type = PhraseType.end;
+		} else if (addresses[idx] == 0x80) {
+			newPhrase.type = PhraseType.fastForwardOn;
+		} else if (addresses[idx] == 0x81) {
+			newPhrase.type = PhraseType.fastForwardOff;
+		} else if (addresses[idx] < 0x80) {
+			newPhrase.type = PhraseType.jumpLimited;
+			newPhrase.jumpTimes = addresses[idx];
 			idx++;
-			order.id = phraseID(phrases[idx]);
-		} else if ((phrases[idx] > 0x81) && (phrases[idx] < 0x100)) {
-			order.type = PhraseType.jump;
+			newPhrase.id = phraseID(addresses[idx]);
+		} else if ((addresses[idx] > 0x81) && (addresses[idx] < 0x100)) {
+			newPhrase.type = PhraseType.jump;
 			idx++;
-			order.id = phraseID(phrases[idx]);
+			newPhrase.id = phraseID(addresses[idx]);
 		} else {
-			order.type = PhraseType.pattern;
-			order.id = phrases[idx];
+			newPhrase.type = PhraseType.pattern;
+			newPhrase.id = addresses[idx];
 		}
-		idx++;
+		newPhrases ~= newPhrase;
 	}
-	song.order = newPhrases;
+	return newPhrases;
+}
+private void decompileSong(scope ubyte[] data, ref Song song) @safe {
+	immutable copyData = data.idup;
 
 	debug(nspclogging) tracef("Phrases: %(%s, %)", song.order);
 	song.validatePhrases();
@@ -442,7 +441,6 @@ private void decompileSong(scope ubyte[] data, ref Song song, int startAddress) 
 	song.trackLists = null;
 	song.tracks = null;
 
-	index = fpIndex;
 	ubyte tmpPercussionBase;
 	foreach (phrase; song.order) {
 		if (phrase.type != PhraseType.pattern) {
