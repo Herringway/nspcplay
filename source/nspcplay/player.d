@@ -1073,18 +1073,6 @@ struct NSPCPlayer {
 	bool isPlaying() const pure @safe nothrow {
 		return songPlaying;
 	}
-	const(Sample)[] getSamples() const pure @safe nothrow return {
-		import std.algorithm.iteration : filter;
-		import std.array : array;
-		return currentSong.samples[].filter!(x => x.isValid).array;
-	}
-	void replaceSample(size_t index, short[] data, int newLoop) @safe pure nothrow {
-		currentSong.samples[index].data = data;
-		currentSong.samples[index].loopLength = newLoop;
-	}
-	void replaceSample(size_t index, short[] data) @safe pure nothrow {
-		replaceSample(index, data, currentSong.samples[index].loopLength);
-	}
 }
 
 private bool inRange(T)(T val, T lower, T upper) {

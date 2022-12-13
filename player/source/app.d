@@ -103,7 +103,6 @@ int main(string[] args) {
 		phrases ~= phrasePortion.to!ushort(16);
 	}
 	auto song = loadNSPCFile(file, phrases);
-	nspc.loadSong(song);
 	if (channelsEnabled.length != 8) {
 		stderr.writeln("Channel string must be exactly 8 characters long!");
 		return 1;
@@ -115,7 +114,7 @@ int main(string[] args) {
 
 	nspc.interpolation = interpolation;
 	if (replaceSamples != "") {
-		foreach(idx, sample; nspc.getSamples) {
+		foreach(idx, sample; song.getSamples) {
 			const glob = format!"%s.*.brr.wav"(sample.hash.toHexString);
 			auto matched = dirEntries(replaceSamples, glob, SpanMode.shallow);
 			if (!matched.empty) {
@@ -140,10 +139,12 @@ int main(string[] args) {
 				}
 				assert(header.bitsPerSample == 16, "Sample must be 16-bit!");
 				infof("Replacing sample with %s", matched.front.name);
-				nspc.replaceSample(idx, newSample, newLoop);
+				song.replaceSample(idx, newSample, newLoop);
 			}
 		}
 	}
+
+	nspc.loadSong(song);
 	nspc.play();
 	trace("Playing NSPC music");
 
@@ -170,7 +171,7 @@ int main(string[] args) {
 		if (!outfile.exists) {
 			mkdirRecurse(outfile);
 		}
-		foreach(idx, sample; nspc.getSamples) {
+		foreach(idx, sample; song.getSamples) {
 			const filename = buildPath(outfile, format!"%s.%s.brr.wav"(sample.hash.toHexString, sample.loopLength));
 			if (!filename.exists) {
 				dumpWav(sample.data, sampleRate, 1, filename);

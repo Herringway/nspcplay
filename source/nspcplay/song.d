@@ -275,6 +275,18 @@ struct Song {
 		auto n = nullSink;
 		toString(n);
 	}
+	const(Sample)[] getSamples() const pure @safe nothrow return {
+		import std.algorithm.iteration : filter;
+		import std.array : array;
+		return samples[].filter!(x => x.isValid).array;
+	}
+	void replaceSample(size_t index, short[] data, int newLoop) @safe pure nothrow {
+		samples[index].data = data;
+		samples[index].loopLength = newLoop;
+	}
+	void replaceSample(size_t index, short[] data) @safe pure nothrow {
+		replaceSample(index, data, samples[index].loopLength);
+	}
 }
 private struct PrototypeInstrument {
 	align(1):
