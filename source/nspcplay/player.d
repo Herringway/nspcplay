@@ -39,9 +39,10 @@ private struct SongState {
 	ubyte[8] firCoefficients;
 	short[8] firLeft;
 	short[8] firRight;
+	bool enchantedReadahead = true; //this is a bug that existed in the prototype, and optionally by addmusick
 	//amk state
+	bool amkFixSampleLoadTuning;
 	bool useAltRTable;
-	bool enchantedReadahead = false;
 }
 
 private struct Slider {
@@ -113,7 +114,7 @@ private struct ChannelState {
 	ubyte tremoloPhase;
 	ubyte tremoloStartCounter;
 
-	Sample sample;
+	ubyte sampleID;
 	int samplePosition = -1;
 	int noteFrequency;
 
@@ -133,7 +134,6 @@ private struct ChannelState {
 	ubyte noteDelta; //TODO: implement this. what unit does this use?
 	ubyte volumeDelta; //ditto
 	// AMK specific state
-	Nullable!ubyte sampleOverride;
 	Nullable!ushort tuningOverride;
 	ushort semitoneTune;
 	ubyte volumeBoost;
@@ -330,7 +330,7 @@ void doEcho(ref SongState state, ref short leftSample, ref short rightSample, in
 struct NSPCPlayer {
 	enum defaultSpeed = 500;
 
-	package Song currentSong;
+	package const(Song)* currentSong;
 	private SongState state;
 	private int mixrate = nativeSamplingRate;
 	private int timerSpeed = defaultSpeed;
@@ -358,6 +358,7 @@ struct NSPCPlayer {
 			}
 			length++;
 			foreach (i, ref channel; state.channels) {
+				const loadedSample = currentSong.samples[channel.sampleID];
 				if (!channel.enabled) {
 					continue;
 				}
@@ -370,12 +371,12 @@ struct NSPCPlayer {
 
 				foreach (idx, ref interpolationSample; channel.interpolationBuffer) {
 					size_t offset = ipos + idx;
-					while (channel.sample.loopLength && (offset >= channel.sample.data.length)) {
-						offset -= channel.sample.loopLength;
+					while (loadedSample.loopLength && (offset >= loadedSample.data.length)) {
+						offset -= loadedSample.loopLength;
 					}
-					if (offset < channel.sample.data.length) {
-						interpolationSample = channel.sample.data[offset];
-					} else if (channel.sample.data) {
+					if (offset < loadedSample.data.length) {
+						interpolationSample = loadedSample.data[offset];
+					} else if (loadedSample.data) {
 						interpolationSample = channel.interpolationBuffer[idx - 1];
 					} else { //no sample data?
 					}
@@ -395,9 +396,9 @@ struct NSPCPlayer {
 				sample[right] += cast(int)(s1 * channel.rightVolume / 128.0);
 
 				channel.samplePosition += channel.noteFrequency;
-				if ((channel.samplePosition >> 15) >= channel.sample.data.length) {
-					if (channel.sample.loopLength) {
-						channel.samplePosition -= channel.sample.loopLength << 15;
+				if ((channel.samplePosition >> 15) >= loadedSample.data.length) {
+					if (loadedSample.loopLength) {
+						channel.samplePosition -= loadedSample.loopLength << 15;
 					} else {
 						channel.samplePosition = -1;
 						channel.adsrPhase = ADSRPhase.release;
@@ -447,8 +448,8 @@ struct NSPCPlayer {
 	private void setInstrument(ref SongState st, ref ChannelState c, size_t instrument) nothrow pure @safe {
 		const idata = currentSong.instruments[instrument];
 		c.instrument = cast(ubyte) instrument;
+		c.sampleID = currentSong.instruments[instrument].sampleID;
 		setADSRGain(c, idata.adsrGain);
-		c.sampleOverride.nullify();
 		c.tuningOverride.nullify();
 	}
 	private void setADSRGain(ref ChannelState c, const ADSRGain adsrGain) nothrow pure @safe {
@@ -635,8 +636,9 @@ struct NSPCPlayer {
 				st.firCoefficients = command.parameters;
 				break;
 			case VCMD.amkSampleLoad:
-				c.sampleOverride = command.parameters[0];
-				c.tuningOverride = (cast(ushort)command.parameters[1] << 8) | cast(ubyte)currentSong.instruments[c.instrument].tuning;
+				c.sampleID = command.parameters[0];
+				ubyte finetune = st.amkFixSampleLoadTuning ? 0 : cast(ubyte)currentSong.instruments[c.instrument].tuning;
+				c.tuningOverride = (cast(ushort)command.parameters[1] << 8) | finetune;
 				break;
 			case VCMD.amkF4:
 				if (command.parameters[0] == 3) {
@@ -716,7 +718,7 @@ struct NSPCPlayer {
 			c.tremoloStartCounter = 0;
 
 			c.samplePosition = 0;
-			c.sample = currentSong.samples[c.sampleOverride.get(currentSong.instruments[c.instrument].sampleID) & 0x7F];
+			//c.sampleID = currentSong.instruments[c.instrument].sampleID;
 			c.gain = 0;
 			c.setADSRPhase((currentSong.instruments[c.instrument].adsrGain.mode == ADSRGainMode.adsr) ? ADSRPhase.attack : ADSRPhase.gain);
 
@@ -746,7 +748,7 @@ struct NSPCPlayer {
 			auto p = c.parser;
 			bool done;
 			while (!done) {
-				const tmpCommand = p.popCommand(currentSong, done, st.enchantedReadahead);
+				const tmpCommand = p.popCommand(*currentSong, done, st.enchantedReadahead);
 				if (tmpCommand.type.among(VCMDClass.note, VCMDClass.tie, VCMDClass.rest, VCMDClass.percussion)) {
 					nextNote = tmpCommand.type;
 					break;
@@ -873,7 +875,7 @@ struct NSPCPlayer {
 	private bool execute(ref Parser parser, ref ChannelState channel, ref SongState song) nothrow pure @safe {
 		while (1) {
 			bool done;
-			const command = parser.popCommand(currentSong, done);
+			const command = parser.popCommand(*currentSong, done);
 			final switch (command.type) {
 				case VCMDClass.terminator:
 					if (done) {
@@ -919,7 +921,7 @@ struct NSPCPlayer {
 				const command = readCommand(currentSong.variant, channel.parser.sequenceData, length);
 				if (command.special == VCMD.pitchSlideToNote) {
 					doCommand(st, channel, command);
-					channel.parser.popCommand(currentSong);
+					channel.parser.popCommand(*currentSong);
 				}
 			}
 		}
@@ -1051,11 +1053,11 @@ struct NSPCPlayer {
 	void stop() @safe pure nothrow {
 		songPlaying = false;
 	}
-	void loadSong(Song song) @safe pure nothrow {
+	void loadSong(const Song song) @safe pure nothrow {
 		if (songPlaying) {
 			stop();
 		}
-		currentSong = song;
+		currentSong = &[song][0];
 		initialize();
 	}
 	/// Sets the playback speed. Default value is NSPCPlayer.defaultSpeed.

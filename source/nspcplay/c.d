@@ -27,27 +27,27 @@ size_t nspcplayFillBuffer(scope NSPCPlayer* player, short[2]* buffer, size_t buf
 	return player.fillBuffer(buffer[0 .. bufferLength]).length;
 }
 
-int nspcplayLoadSequencePack(scope NSPCPlayer* player, const ubyte* data, size_t dataLength) {
+int nspcplayLoadSequencePack(scope Song* song, const ubyte* data, size_t dataLength) {
 	try {
-		player.currentSong.loadSequencePack(data[0 .. dataLength]);
+		song.loadSequencePack(data[0 .. dataLength]);
 	} catch (Exception e) {
 		lastError = e.msg.toStringz;
 		return 1;
 	}
 	return 0;
 }
-int nspcplayLoadInstrumentPack(scope NSPCPlayer* player, scope ubyte* buffer, scope const ubyte* data, size_t dataLength) {
+int nspcplayLoadInstrumentPack(scope Song* song, scope ubyte* buffer, scope const ubyte* data, size_t dataLength) {
 	try {
-		player.currentSong.loadInstrumentPack(buffer[0 .. 65536], data[0 .. dataLength]);
+		song.loadInstrumentPack(buffer[0 .. 65536], data[0 .. dataLength]);
 	} catch (Exception e) {
 		lastError = e.msg.toStringz;
 		return 1;
 	}
 	return 0;
 }
-int nspcplayInitializeInstruments(scope NSPCPlayer* player, const scope ubyte* buffer, ushort instrumentBase, ushort sampleBase) {
+int nspcplayInitializeInstruments(scope Song* song, const scope ubyte* buffer, ushort instrumentBase, ushort sampleBase) {
 	try {
-		player.currentSong.initializeInstruments(buffer[0 .. 65536], instrumentBase, sampleBase);
+		song.initializeInstruments(buffer[0 .. 65536], instrumentBase, sampleBase);
 	} catch (Exception e) {
 		lastError = e.msg.toStringz;
 		return 1;
