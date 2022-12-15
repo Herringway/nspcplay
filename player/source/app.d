@@ -103,6 +103,12 @@ int main(string[] args) {
 		phrases ~= phrasePortion.to!ushort(16);
 	}
 	auto song = loadNSPCFile(file, phrases);
+	if (song.tags) {
+		info("Tags:");
+		foreach (pair; song.tags) {
+			infof("%s: %s", pair.key, pair.value.string);
+		}
+	}
 	if (channelsEnabled.length != 8) {
 		stderr.writeln("Channel string must be exactly 8 characters long!");
 		return 1;

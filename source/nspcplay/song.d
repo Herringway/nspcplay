@@ -10,6 +10,7 @@ import std.format : format;
 import nspcplay.common;
 import nspcplay.samples;
 import nspcplay.sequence;
+import nspcplay.tags;
 
 private enum maxInstruments = 128;
 private enum maxSampleCount = 128;
@@ -94,6 +95,7 @@ struct Song {
 	Sample[128] samples;
 	ubyte[256] percussionNotes;
 	size_t percussionBase;
+	TagPair[] tags;
 	/// Load a single sequence pack at a given address
 	void loadSequencePack(const(ubyte)[] data, ushort base) @safe {
 		loadSequence(data, base);
@@ -368,6 +370,7 @@ Song loadNSPCFile(const(ubyte)[] data, ushort[] phrases = []) @safe {
 	} else {
 		song.firCoefficients = cast(const(ubyte[8])[])remaining[0 .. 8 * header.firCoefficientTableCount];
 	}
+	song.tags = readTags(remaining[8 * header.firCoefficientTableCount .. $]);
 	song.order = phrases == null ? decompilePhrases(buffer[], header.songBase) : interpretPhrases(phrases, header.songBase);
 	decompileSong(buffer[], song);
 	debug(nspclogging) tracef("FIR coefficients: %s", song.firCoefficients);
