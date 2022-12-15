@@ -55,23 +55,8 @@ ROMFile readROM(string path) {
 	return ROMFile.init;
 }
 
-const(ubyte[]) readPacks(const ubyte[] input) {
-	const(ubyte)[] result;
-	size_t offset = 0;
-	while (true) {
-		auto size = (cast(ushort[])(input[offset .. offset + 2]))[0];
-		if (size == 0) {
-			break;
-		}
-		auto spcOffset = (cast(ushort[])(input[offset + 2 .. offset + 4]))[0];
-		infof("Song subpack: $%04X, %04X bytes", spcOffset, size);
-		result ~= input[offset .. offset + size + 4];
-		offset += size + 4;
-	}
-	return result;
-}
-
 void extractEarthbound(const scope ubyte[] data, string outDir) {
+	static immutable string[] titles = import("eb.txt").split("\n");
 	align(1) static struct PackPointer {
 		align(1):
 		ubyte bank;
@@ -91,29 +76,33 @@ void extractEarthbound(const scope ubyte[] data, string outDir) {
 	auto songPointers = cast(ushort[])data[SONG_POINTER_TABLE .. SONG_POINTER_TABLE + ushort.sizeof * NUM_SONGS];
 	foreach (idx, songPacks; bgmPacks) {
 		infof("Song ID: 0x%03X", idx);
-		auto file = File(buildPath(outDir, format!"%03X.nspc"(idx)), "w");
-		void writePack(ubyte pack) {
+		auto file = File(buildPath(outDir, format!"%03X.nspc"(idx)), "w").lockingBinaryWriter;
+		NSPCWriter writer;
+		const(Pack)[] getPack(ubyte pack) {
 			size_t offset = packTable[pack].full - 0xC00000;
-			file.rawWrite(readPacks(data[offset .. $]));
+			return parsePacks(data[offset .. $]);
 		}
-		NSPCFileHeader header;
-		header.songBase = songPointers[idx];
-		header.instrumentBase = 0x6E00;
-		header.sampleBase = 0x6C00;
-		header.volumeTable = VolumeTable.hal1;
-		header.releaseTable = ReleaseTable.hal1;
-		infof("Song Base: $%04X", header.songBase);
-		file.rawWrite([header]);
+		writer.header.songBase = songPointers[idx];
+		writer.header.instrumentBase = 0x6E00;
+		writer.header.sampleBase = 0x6C00;
+		writer.header.volumeTable = VolumeTable.hal1;
+		writer.header.releaseTable = ReleaseTable.hal1;
+		infof("Song Base: $%04X", writer.header.songBase);
 		if (songPacks[2] == 0xFF) {
-			writePack(1);
+			writer.packs ~= getPack(1);
 		}
 		foreach (pack; songPacks) {
 			if (pack == 0xFF) {
 				continue;
 			}
 			infof("Song pack: $%02X ($%06X)", pack, packTable[pack].full);
-			writePack(pack);
+			writer.packs ~= getPack(pack);
 		}
+		writer.tags = [
+			TagPair("album", "Earthbound"),
+			TagPair("title", titles[idx]),
+		];
+		writer.toBytes(file);
 	}
 }
 
@@ -121,28 +110,30 @@ void extractKDC(const scope ubyte[] data, string outDir) {
 	const sequencePackPointerTable = cast(uint[])data[0x3745 .. 0x3745 + 33 * uint.sizeof];
 	const samplePackPointerTable = cast(uint[])data[0x372D .. 0x372D + 3 * uint.sizeof];
 	const instrumentPackPointerTable = cast(uint[])data[0x373B .. 0x373B + 2 * uint.sizeof];
-	const(ubyte[])[] globalPacks;
+	const(Pack)[] globalPacks;
 	foreach (pack; samplePackPointerTable) {
-		globalPacks ~= readPacks(data[loromToPC(pack) .. $]);
+		globalPacks ~= parsePacks(data[loromToPC(pack) .. $]);
 	}
 	foreach (pack; instrumentPackPointerTable) {
-		globalPacks ~= readPacks(data[loromToPC(pack) .. $]);
+		globalPacks ~= parsePacks(data[loromToPC(pack) .. $]);
 	}
 	foreach (id, sequencePackPointer; sequencePackPointerTable) {
-		auto file = File(buildPath(outDir, format!"%03X.nspc"(id)), "w");
-		const seqPack = readPacks(data[loromToPC(sequencePackPointer) .. $]);
-		NSPCFileHeader header;
-		header.songBase = 0x6502;
-		header.sampleBase = 0x400;
-		header.instrumentBase = 0x600;
-		header.volumeTable = VolumeTable.hal3;
-		header.releaseTable = ReleaseTable.hal3;
-		file.rawWrite([header]);
+		auto file = File(buildPath(outDir, format!"%03X.nspc"(id)), "w").lockingBinaryWriter;
+		const seqPack = parsePacks(data[loromToPC(sequencePackPointer) .. $]);
+		NSPCWriter writer;
+		writer.header.songBase = 0x6502;
+		writer.header.sampleBase = 0x400;
+		writer.header.instrumentBase = 0x600;
+		writer.header.volumeTable = VolumeTable.hal3;
+		writer.header.releaseTable = ReleaseTable.hal3;
 		foreach (instrumentPack; globalPacks) {
-			file.rawWrite(instrumentPack);
+			writer.packs ~= instrumentPack;
 		}
-		file.rawWrite(seqPack);
-		file.rawWrite(packTerminator);
+		writer.packs ~= seqPack;
+		writer.tags = [
+			TagPair("album", "Kirby's Dream Course"),
+		];
+		writer.toBytes(file);
 	}
 }
 
@@ -169,32 +160,30 @@ void extractKSS(const scope ubyte[] data, string outDir) {
 	auto packTable = cast(PackPointer[])(data[PACK_POINTER_TABLE .. PACK_POINTER_TABLE + (numSongs + 10) * PackPointer.sizeof]);
 	auto sfxPacks = data[InstrumentPackTable .. InstrumentPackTable + numSongs];
 	const progOffset = packTable[0].full - 0xC00000;
-	const progPack = readPacks(data[progOffset .. $]);
-	//const tPack = readPacks(data[packTable[1].full - 0xC00000 .. $]);
+	const progPack = parsePacks(data[progOffset .. $]);
 	foreach (song; 0 .. numSongs) {
 		auto seqPackOffset = packTable[song + 10].full - 0xC00000;
 		infof("Song data found at $%06X", seqPackOffset);
-		const seqPackData = readPacks(data[seqPackOffset .. $]);
+		const seqPackData = parsePacks(data[seqPackOffset .. $]);
 		auto instrPackOffset = packTable[sfxPacks[song] + 1].full - 0xC00000;
 		infof("Instrument data found at $%06X", instrPackOffset);
-		const instrPackData = readPacks(data[instrPackOffset .. $]);
+		const instrPackData = parsePacks(data[instrPackOffset .. $]);
 		//const songPointers = cast(const(ushort)[])(tPack[112 * 2 .. 112 * 2 + numSongs * 2]);
 		infof("Song ID: 0x%03X", song);
-		auto file = File(buildPath(outDir, format!"%03X.nspc"(song)), "w");
-		NSPCFileHeader header;
-		header.songBase = (cast(const(ushort)[])(seqPackData[2 .. 4]))[0];
-		header.instrumentBase = 0x500;
-		header.sampleBase = 0x300;
-		header.volumeTable = VolumeTable.hal2;
-		header.releaseTable = ReleaseTable.hal2;
-		infof("Song Base: $%04X", header.songBase);
-		file.rawWrite([header]);
-		file.rawWrite(progPack);
-		//if (instrPackData != tPack) {
-		file.rawWrite(instrPackData);
-		//}
-		file.rawWrite(seqPackData);
-		file.rawWrite(packTerminator);
+		auto file = File(buildPath(outDir, format!"%03X.nspc"(song)), "w").lockingBinaryWriter;
+		NSPCWriter writer;
+		writer.header.songBase = seqPackData[0].address;
+		writer.header.instrumentBase = 0x500;
+		writer.header.sampleBase = 0x300;
+		writer.header.volumeTable = VolumeTable.hal2;
+		writer.header.releaseTable = ReleaseTable.hal2;
+		writer.packs ~= progPack;
+		writer.packs ~= instrPackData;
+		writer.packs ~= seqPackData;
+		writer.tags = [
+			TagPair("album", "Kirby Super Star"),
+		];
+		writer.toBytes(file);
 	}
 }
 
@@ -205,15 +194,11 @@ void extractSMW(const scope ubyte[] data, string outDir) {
 	const seq1Offset = 0x718B1;
 	const seq2Offset = 0x72ED6;
 	const seq3Offset = 0x1E400;
-	const progPack = readPacks(data[progOffset .. $]);
-	const sfxPack = readPacks(data[sfxOffset .. $]);
-	const seq1Pack = readPacks(data[seq1Offset .. $]);
-	const seq2Pack = readPacks(data[seq2Offset .. $]);
-	const seq3Pack = readPacks(data[seq3Offset .. $]);
-	const parsedProg = parsePacks(progPack);
-	const parsedSeq1 = parsePacks(seq1Pack);
-	const parsedSeq2 = parsePacks(seq2Pack);
-	const parsedSeq3 = parsePacks(seq3Pack);
+	const parsedProg = parsePacks(data[progOffset .. $]);
+	const parsedSeq1 = parsePacks(data[seq1Offset .. $]);
+	const parsedSeq2 = parsePacks(data[seq2Offset .. $]);
+	const parsedSeq3 = parsePacks(data[seq3Offset .. $]);
+	const parsedSfx = parsePacks(data[sfxOffset .. $]);
 	enum tableBase = 0x135E;
 	const(ubyte)[] writablePack(const Pack pack) {
 		const(ubyte)[] result;
@@ -232,24 +217,26 @@ void extractSMW(const scope ubyte[] data, string outDir) {
 					break;
 				}
 				const filename = format!"%s - %02X.nspc"(bank, idx);
-				auto file = File(buildPath(outDir, filename), "w");
+				auto file = File(buildPath(outDir, filename), "w").lockingBinaryWriter;
+				NSPCWriter writer;
 				infof("Writing %s", filename);
-				NSPCFileHeader header;
-				header.songBase = songAddr;
-				header.sampleBase = 0x8000;
-				header.instrumentBase = 0x5F46;
-				header.variant = nspcplay.Variant.prototype;
-				header.extra.percussionBase = 0x5FA5;
-				header.volumeTable = VolumeTable.nintendo;
-				header.releaseTable = ReleaseTable.nintendo;
-				header.firCoefficientTableCount = 2;
-				file.rawWrite([header]);
-				file.rawWrite(writablePack(parsedProg[1]));
-				file.rawWrite(sfxPack);
-				file.rawWrite(writablePack(pack));
-				file.rawWrite(packTerminator);
+				writer.header.songBase = songAddr;
+				writer.header.sampleBase = 0x8000;
+				writer.header.instrumentBase = 0x5F46;
+				writer.header.variant = nspcplay.Variant.prototype;
+				writer.header.extra.percussionBase = 0x5FA5;
+				writer.header.volumeTable = VolumeTable.nintendo;
+				writer.header.releaseTable = ReleaseTable.nintendo;
+				writer.header.firCoefficientTableCount = 2;
+				writer.packs ~= parsedProg[1];
+				writer.packs ~= parsedSfx;
+				writer.packs ~= pack;
 				// FIR coefficients
-				file.rawWrite(firCoefficients);
+				writer.firCoefficients = firCoefficients;
+				writer.tags = [
+					TagPair("album", "Super Mario World"),
+				];
+				writer.toBytes(file);
 				lowest = min(songAddr, lowest);
 			}
 		}
@@ -279,4 +266,29 @@ const(Pack)[] parsePacks(const(ubyte)[] input) {
 		offset += size + 4;
 	}
 	return result;
+}
+
+struct NSPCWriter {
+	NSPCFileHeader[1] header_;
+	ref header() @safe pure {
+		return header_[0];
+	}
+	const(Pack)[] packs;
+	const(ubyte[8])[] firCoefficients;
+	const(TagPair)[] tags;
+	void toBytes(W)(ref W writer) const {
+		put(writer, cast(const(ubyte)[])header_[]);
+		foreach (pack; packs) {
+			put(writer, pack.size);
+			put(writer, pack.address);
+			put(writer, pack.data);
+		}
+		put(writer, packTerminator);
+		foreach (coeff; firCoefficients) {
+			put(writer, coeff);
+		}
+		if (tags) {
+			put(writer, tagsToBytes(tags));
+		}
+	}
 }
