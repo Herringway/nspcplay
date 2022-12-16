@@ -23,6 +23,8 @@ int main(string[] args) {
 		extractEarthbound(rom.data, args[2]);
 	} else if (rom.title == "SUPER MARIOWORLD     ") {
 		extractSMW(rom.data, args[2]);
+	} else if (rom.title == "THE LEGEND OF ZELDA  ") {
+		extractZ3(rom.data, args[2]);
 	} else {
 		writefln!"I don't know what '%s' is."(rom.title);
 		return 1;
@@ -235,5 +237,41 @@ void extractSMW(const scope ubyte[] data, string outDir) {
 				lowest = min(songAddr, lowest);
 			}
 		}
+	}
+}
+
+void extractZ3(const scope ubyte[] data, string outDir) {
+	enum progOffset = 0xC8000;
+	enum songOffset2 = 0xD8000;
+	enum songOffset3 = 0xD5380;
+	const parsed = [parsePacks(data[progOffset .. $]), parsePacks(data[songOffset2 .. $]), parsePacks(data[songOffset3 .. $])];
+	const songTable = cast(const(ushort)[])parsed[0][7].data[0 .. 27 * ushort.sizeof]; //bank 0's song table is a little shorter than the others...?
+	const songTable2 = cast(const(ushort)[])parsed[1][0].data[0 .. 35 * ushort.sizeof];
+	const songTable3 = cast(const(ushort)[])parsed[2][0].data[0 .. 35 * ushort.sizeof];
+	uint songID;
+	foreach (p1, p2, p3; zip(songTable.chain(0.repeat(8)), songTable2, songTable3)) {
+		foreach (idx, address; only(p1, p2, p3).enumerate) {
+			if (address == 0) {
+				continue;
+			}
+			const filename = format!"%s - %02X.nspc"(idx, songID);
+			auto file = File(buildPath(outDir, filename), "w").lockingBinaryWriter;
+			NSPCWriter writer;
+			writer.header.songBase = cast(ushort)address;
+			writer.header.sampleBase = 0x3C00;
+			writer.header.instrumentBase = 0x3D00;
+			writer.header.variant = nspcplay.Variant.standard;
+			writer.header.volumeTable = VolumeTable.nintendo;
+			writer.header.releaseTable = ReleaseTable.nintendo;
+			writer.packs = parsed[0];
+			if (idx > 0) {
+				writer.packs ~= parsed[idx];
+			}
+			writer.tags = [
+				TagPair("album", "The Legend of Zelda: A Link to the Past"),
+			];
+			writer.toBytes(file);
+		}
+		songID++;
 	}
 }
