@@ -68,7 +68,6 @@ void extractEarthbound(const scope ubyte[] data, string outDir) {
 	enum BGM_PACK_TABLE = 0x4F70A;
 	enum PACK_POINTER_TABLE = 0x4F947;
 	auto packTable = cast(PackPointer[])(data[PACK_POINTER_TABLE .. PACK_POINTER_TABLE + NUM_PACKS * PackPointer.sizeof]);
-	//const SONG_POINTER_TABLE = packTable[1].full - 0xC00000 + 4 + 0x2E4A;
 	enum SONG_POINTER_TABLE = 0x26298C;
 	auto bgmPacks = cast(ubyte[3][])data[BGM_PACK_TABLE .. BGM_PACK_TABLE + (ubyte[3]).sizeof * NUM_SONGS];
 	auto songPointers = cast(ushort[])data[SONG_POINTER_TABLE .. SONG_POINTER_TABLE + ushort.sizeof * NUM_SONGS];
@@ -166,7 +165,6 @@ void extractKSS(const scope ubyte[] data, string outDir) {
 		auto instrPackOffset = packTable[sfxPacks[song] + 1].full - 0xC00000;
 		infof("Instrument data found at $%06X", instrPackOffset);
 		const instrPackData = parsePacks(data[instrPackOffset .. $]);
-		//const songPointers = cast(const(ushort)[])(tPack[112 * 2 .. 112 * 2 + numSongs * 2]);
 		infof("Song ID: 0x%03X", song);
 		auto file = File(buildPath(outDir, format!"%03X.nspc"(song)), "w").lockingBinaryWriter;
 		NSPCWriter writer;
@@ -229,7 +227,6 @@ void extractSMW(const scope ubyte[] data, string outDir) {
 				writer.packs ~= parsedProg[1];
 				writer.packs ~= parsedSfx;
 				writer.packs ~= pack;
-				// FIR coefficients
 				writer.firCoefficients = firCoefficients;
 				writer.tags = [
 					TagPair("album", "Super Mario World"),
