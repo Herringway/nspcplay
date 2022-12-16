@@ -14,29 +14,33 @@ int main(string[] args) {
 		stderr.writefln!"Missing argument - valid options are %-('%s', %)"(validArgs);
 		return 1;
 	}
-	const(ubyte)[] finished;
+	NSPCWriter finished;
 	string filename;
-	switch (args[1].toLower) {
-		case "spc":
-			finished = buildNSPCFromSPC(args[0] ~ args[2 .. $], filename);
-			break;
-		case "packs":
-			finished = buildNSPCFromPackfiles(args[0] ~ args[2 .. $], filename);
-			break;
-		default:
-			stderr.writefln!"Invalid argument - valid options are %-('%s', %)"(validArgs);
-			return 1;
-	}
-	if (finished == []) {
+	try {
+		switch (args[1].toLower) {
+			case "spc":
+				finished = buildNSPCFromSPC(args[0] ~ args[2 .. $], filename);
+				break;
+			case "packs":
+				finished = buildNSPCFromPackfiles(args[0] ~ args[2 .. $], filename);
+				break;
+			default:
+				stderr.writefln!"Invalid argument - valid options are %-('%s', %)"(validArgs);
+				return 1;
+		}
+	} catch (HelpWantedException e) {
+		defaultGetoptPrinter(e.helpMessage, e.options);
 		return 1;
 	}
-	const loadedSong = loadNSPCFile(finished);
-	File(filename, "w").rawWrite(finished);
+	Appender!(ubyte[]) buffer;
+	finished.toBytes(buffer);
+	const loadedSong = loadNSPCFile(buffer.data);
+	File(filename, "w").rawWrite(buffer.data);
 	return 0;
 }
 
-const(ubyte)[] buildNSPCFromSPC(string[] args, out string filename) {
-	NSPCFileHeader header;
+NSPCWriter buildNSPCFromSPC(string[] args, out string filename) {
+	NSPCWriter writer;
 	bool autodetect;
 	void handleIntegers(string opt, string value) {
 		ushort val;
@@ -47,20 +51,20 @@ const(ubyte)[] buildNSPCFromSPC(string[] args, out string filename) {
 		}
 		switch (opt) {
 			case "s|songaddress":
-				header.songBase = val;
+				writer.header.songBase = val;
 				break;
 			case "a|sampleaddress":
-				header.sampleBase = val;
+				writer.header.sampleBase = val;
 				break;
 			case "i|instrumentaddress":
-				header.instrumentBase = val;
+				writer.header.instrumentBase = val;
 				break;
 			case "addmusick-custominstruments":
-				header.extra.customInstruments = val;
+				writer.header.extra.customInstruments = val;
 				break;
 			case "prototype-percussionbase":
 			case "addmusick-percussionbase":
-				header.extra.percussionBase = val;
+				writer.header.extra.percussionBase = val;
 				break;
 			default:
 				throw new Exception("Unknown option "~opt);
@@ -74,11 +78,10 @@ const(ubyte)[] buildNSPCFromSPC(string[] args, out string filename) {
 		"i|instrumentaddress", "Address of instrument data", &handleIntegers,
 		"prototype-percussionbase|addmusick-percussionbase", "Percussion base id (prototype, addmusick variants)", &handleIntegers,
 		"addmusick-custominstruments", "Custom instrument address (addmusick variant)", &handleIntegers,
-		"v|variant", "NSPC variant to use", &header.variant,
+		"v|variant", "NSPC variant to use", &writer.header.variant,
 	);
 	if (helpInfo.helpWanted || (args.length == 1)) {
-		defaultGetoptPrinter(format!"NSPC creation tool (SPC conversion)\nUsage: %s spc <filename.spc>"(args[0]), helpInfo.options);
-		return [];
+		throw new HelpWantedException(format!"NSPC creation tool (SPC conversion)\nUsage: %s spc <filename.spc>"(args[0]), helpInfo.options);
 	}
 	if (!filename) {
 		filename = args[1].baseName.withExtension(".nspc").text;
@@ -87,43 +90,33 @@ const(ubyte)[] buildNSPCFromSPC(string[] args, out string filename) {
 	if (autodetect) {
 		const sampleDirectory = spcFile[0x1015D];
 		infof("Using auto-detected sample directory: %04X", sampleDirectory << 8);
-		header.sampleBase = sampleDirectory << 8;
+		writer.header.sampleBase = sampleDirectory << 8;
 	}
 	if (autodetect) {
 		if (spcFile.isAMK) {
 			infof("Detected AddMusicK song");
-			header.variant = nspcplay.Variant.addmusick;
+			writer.header.variant = nspcplay.Variant.addmusick;
 			const songTableAddress = spcFile.find(amkPreTable)[amkPreTable.length .. $];
 			const tableAddr = (cast(const(ushort)[])(songTableAddress[0 .. 2]))[0] + 2 + 0x100 + 18;
 			infof("Detected song table: %04X", tableAddr - 0x100);
-			header.songBase = (cast(const(ushort)[])spcFile[tableAddr .. tableAddr + 2])[0];
-			header.instrumentBase = 0x1844;
-			infof("Detected song address: %04X", header.songBase);
-			const songStartData = spcFile[header.songBase + 0x100 .. $];
+			writer.header.songBase = (cast(const(ushort)[])spcFile[tableAddr .. tableAddr + 2])[0];
+			writer.header.instrumentBase = 0x1844;
+			infof("Detected song address: %04X", writer.header.songBase);
+			const songStartData = spcFile[writer.header.songBase + 0x100 .. $];
 			ushort customInstrumentBase = 0;
 			while(songStartData[customInstrumentBase .. customInstrumentBase + 2] != [0xFF, 0x00]) {
 				customInstrumentBase += 2;
 			}
-			header.extra.customInstruments = cast(ushort)((cast(const(ushort)[])songStartData[customInstrumentBase + 2 .. customInstrumentBase  + 4])[0] + 6);
-			infof("Detected custom instruments: %04X", header.extra.customInstruments);
+			writer.header.extra.customInstruments = cast(ushort)((cast(const(ushort)[])songStartData[customInstrumentBase + 2 .. customInstrumentBase  + 4])[0] + 6);
+			infof("Detected custom instruments: %04X", writer.header.extra.customInstruments);
 		}
 	}
-	Appender!(const(ubyte)[]) buf;
-	buf ~= HeaderBytes(header).raw[];
-	buf.append!ushort(65535);
-	buf.append!ushort(0);
-	buf ~= spcFile[0x100 .. 0x100FF];
-	buf.append!ushort(0);
-	return buf.data;
+	writer.packs ~= Pack(0, spcFile[0x100 .. 0x100FF]);
+	return writer;
 }
 
-union HeaderBytes {
-	NSPCFileHeader header;
-	ubyte[NSPCFileHeader.sizeof] raw;
-}
-
-const(ubyte)[] buildNSPCFromPackfiles(string[] args, out string filename) {
-	NSPCFileHeader header;
+NSPCWriter buildNSPCFromPackfiles(string[] args, out string filename) {
+	NSPCWriter writer;
 	void handleIntegers(string opt, string value) {
 		ushort val;
 		if (value.startsWith("0x")) {
@@ -133,13 +126,13 @@ const(ubyte)[] buildNSPCFromPackfiles(string[] args, out string filename) {
 		}
 		switch (opt) {
 			case "s|songaddress":
-				header.songBase = val;
+				writer.header.songBase = val;
 				break;
 			case "a|sampleaddress":
-				header.sampleBase = val;
+				writer.header.sampleBase = val;
 				break;
 			case "i|instrumentaddress":
-				header.instrumentBase = val;
+				writer.header.instrumentBase = val;
 				break;
 			default:
 				throw new Exception("Unknown option "~opt);
@@ -150,36 +143,22 @@ const(ubyte)[] buildNSPCFromPackfiles(string[] args, out string filename) {
 		"s|songaddress", "Address of song data", &handleIntegers,
 		"a|sampleaddress", "Address of sample data", &handleIntegers,
 		"i|instrumentaddress", "Address of instrument data", &handleIntegers,
-		"v|variant", "NSPC variant to use", &header.variant,
+		"v|variant", "NSPC variant to use", &writer.header.variant,
 	);
 	if (helpInfo.helpWanted || (args.length == 1)) {
-		defaultGetoptPrinter(format!"NSPC creation tool (Packfile conversion)\nUsage: %s spc <filename.bin> [filename.bin ...]"(args[0]), helpInfo.options);
-		return [];
+		throw new HelpWantedException(format!"NSPC creation tool (Packfile conversion)\nUsage: %s spc <filename.bin> [filename.bin ...]"(args[0]), helpInfo.options);
 	}
 	if (!filename) {
 		filename = args[1].baseName.withExtension(".nspc").text;
 	}
-	Appender!(const(ubyte)[]) buf;
-	buf ~= HeaderBytes(header).raw[];
 	foreach(file; args[1 .. $]) {
-		auto packFile = cast(ubyte[])read(file);
-		size_t offset;
-		while(true) {
-			if (offset >= packFile.length) {
-				break;
-			}
-			auto size = (cast(ushort[])(packFile[offset .. offset + 2]))[0];
-			if (size == 0) {
-				break;
-			}
-			auto spcOffset = (cast(ushort[])(packFile[offset + 2 .. offset + 4]))[0];
-			infof("Song subpack: $%04X, %04X bytes", spcOffset, size);
-			buf ~= packFile[offset .. offset + size + 4];
-			offset += size + 4;
+		const packs = parsePacks(cast(ubyte[])read(file));
+		foreach (pack; packs) {
+			infof("Adding pack %04X (%s bytes)", pack.address, pack.size);
 		}
+		writer.packs ~= packs;
 	}
-	buf.append!ushort(0);
-	return buf.data;
+	return writer;
 }
 
 bool inRange(T)(T val, T lower, T upper) {
@@ -193,4 +172,14 @@ bool isAMK(const ubyte[] data) @safe pure {
 		[0x20, 0xCD, 0xCF, 0xBD, 0xE8, 0x00, 0x8D, 0x00, 0xD6, 0x00, 0x01, 0xFE, 0xFB, 0xD6, 0x00, 0x02], //pre-1.0.9
 		[0x20, 0xCD, 0xCF, 0xBD, 0xE8, 0x00, 0xFD, 0xD6, 0x00, 0x01, 0xD6, 0x00, 0x02, 0xD6, 0x00, 0x03] //1.0.9
 	);
+}
+
+class HelpWantedException : Exception {
+	Option[] options;
+	string helpMessage;
+	this(string msg, Option[] opts, string file = __FILE__, ulong line = __LINE__) @safe pure {
+		this.helpMessage = msg;
+		this.options = opts;
+		super("Help wanted!", file, line);
+	}
 }

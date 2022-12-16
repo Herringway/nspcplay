@@ -547,3 +547,62 @@ private void decodeSamples(ref Song song, scope const ubyte[] buffer, const scop
 		}
 	}
 }
+
+struct Pack {
+	ushort size;
+	ushort address;
+	const(ubyte)[] data;
+	this(ushort addr, const(ubyte)[] data) @safe pure {
+		this.address = addr;
+		this.data = data;
+		assert(data.length <= ushort.max);
+		this.size = cast(ushort)data.length;
+	}
+}
+
+struct NSPCWriter {
+	private static immutable ubyte[] packTerminator = [0, 0];
+	NSPCFileHeader[1] header_;
+	ref header() @safe pure {
+		return header_[0];
+	}
+	const(Pack)[] packs;
+	const(ubyte[8])[] firCoefficients;
+	const(TagPair)[] tags;
+	void toBytes(W)(ref W writer) const {
+		import std.bitmanip : nativeToLittleEndian;
+		import std.range : put;
+		put(writer, cast(const(ubyte)[])header_[]);
+		foreach (pack; packs) {
+			put(writer, nativeToLittleEndian(pack.size)[]);
+			put(writer, nativeToLittleEndian(pack.address)[]);
+			put(writer, pack.data);
+		}
+		put(writer, packTerminator);
+		foreach (coeff; firCoefficients) {
+			put(writer, coeff[]);
+		}
+		if (tags) {
+			put(writer, tagsToBytes(tags));
+		}
+	}
+}
+
+const(Pack)[] parsePacks(const(ubyte)[] input) {
+	const(Pack)[] result;
+	size_t offset = 0;
+	while (offset < input.length) {
+		Pack pack;
+		auto size = (cast(ushort[])(input[offset .. offset + 2]))[0];
+		if (size == 0) {
+			break;
+		}
+		auto spcOffset = (cast(ushort[])(input[offset + 2 .. offset + 4]))[0];
+		pack.size = size;
+		pack.address = spcOffset;
+		pack.data = input[offset + 4 .. offset + size + 4];
+		result ~= pack;
+		offset += size + 4;
+	}
+	return result;
+}

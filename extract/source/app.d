@@ -3,8 +3,6 @@ import std.experimental.logger;
 
 import nspcplay;
 
-immutable ushort[] packTerminator = [0];
-
 align(1) struct PackPointer {
 	align(1):
 	ubyte bank;
@@ -239,56 +237,6 @@ void extractSMW(const scope ubyte[] data, string outDir) {
 				writer.toBytes(file);
 				lowest = min(songAddr, lowest);
 			}
-		}
-	}
-}
-
-struct Pack {
-	ushort size;
-	ushort address;
-	const(ubyte)[] data;
-}
-
-const(Pack)[] parsePacks(const(ubyte)[] input) {
-	const(Pack)[] result;
-	size_t offset = 0;
-	while (offset < input.length) {
-		Pack pack;
-		auto size = (cast(ushort[])(input[offset .. offset + 2]))[0];
-		if (size == 0) {
-			break;
-		}
-		auto spcOffset = (cast(ushort[])(input[offset + 2 .. offset + 4]))[0];
-		pack.size = size;
-		pack.address = spcOffset;
-		pack.data = input[offset + 4 .. offset + size + 4];
-		result ~= pack;
-		offset += size + 4;
-	}
-	return result;
-}
-
-struct NSPCWriter {
-	NSPCFileHeader[1] header_;
-	ref header() @safe pure {
-		return header_[0];
-	}
-	const(Pack)[] packs;
-	const(ubyte[8])[] firCoefficients;
-	const(TagPair)[] tags;
-	void toBytes(W)(ref W writer) const {
-		put(writer, cast(const(ubyte)[])header_[]);
-		foreach (pack; packs) {
-			put(writer, pack.size);
-			put(writer, pack.address);
-			put(writer, pack.data);
-		}
-		put(writer, packTerminator);
-		foreach (coeff; firCoefficients) {
-			put(writer, coeff);
-		}
-		if (tags) {
-			put(writer, tagsToBytes(tags));
 		}
 	}
 }
