@@ -198,12 +198,6 @@ void extractSMW(const scope ubyte[] data, string outDir) {
 	const parsedSeq3 = parsePacks(data[seq3Offset .. $]);
 	const parsedSfx = parsePacks(data[sfxOffset .. $]);
 	enum tableBase = 0x135E;
-	const(ubyte)[] writablePack(const Pack pack) {
-		const(ubyte)[] result;
-		const ushort[] packHeader = [pack.size, pack.address];
-		result ~= cast(const(ubyte)[])packHeader ~ pack.data;
-		return result;
-	}
 	const ubyte[8][] firCoefficients = cast(const(ubyte[8])[])(data[firCoefficientsTable .. firCoefficientsTable + 2 * 8]);
 	foreach (bank, pack; chain(parsedProg, parsedSeq1, parsedSeq2, parsedSeq3).enumerate) {
 		if (pack.address == 0x1360) {
