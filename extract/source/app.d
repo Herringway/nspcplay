@@ -20,7 +20,11 @@ int main(string[] args) {
 	} else if (rom.title == "Kirby's Dream Course ") {
 		extractKDC(rom.data, args[2]);
 	} else if (rom.title == "EARTH BOUND          ") {
-		extractEarthbound(rom.data, args[2]);
+		extractEarthbound(rom.data, false, 0x4F947, 0x4F70A, args[2]);
+	} else if (rom.title == "MOTHER-2             ") {
+		extractEarthbound(rom.data, true, 0x4CCE2, 0x4CAA5, args[2]);
+	} else if (rom.title == "01 95.03.27          ") {
+		extractEarthbound(rom.data, false, 0x4FBD4, 0x4F997, args[2]);
 	} else if (rom.title == "SUPER MARIOWORLD     ") {
 		extractSMW(rom.data, args[2]);
 	} else if (rom.title == "THE LEGEND OF ZELDA  ") {
@@ -55,7 +59,7 @@ ROMFile readROM(string path) {
 	return ROMFile.init;
 }
 
-void extractEarthbound(const scope ubyte[] data, string outDir) {
+void extractEarthbound(const scope ubyte[] data, bool m2packPointers, size_t packPointerTable, size_t packTableOffset, string outDir) {
 	static immutable string[] titles = import("eb.txt").split("\n");
 	align(1) static struct PackPointer {
 		align(1):
@@ -67,35 +71,27 @@ void extractEarthbound(const scope ubyte[] data, string outDir) {
 	}
 	enum NUM_SONGS = 0xBF;
 	enum NUM_PACKS = 0xA9;
-	enum BGM_PACK_TABLE = 0x4F70A;
-	enum PACK_POINTER_TABLE = 0x4F947;
-	auto packTable = cast(PackPointer[])(data[PACK_POINTER_TABLE .. PACK_POINTER_TABLE + NUM_PACKS * PackPointer.sizeof]);
-	enum SONG_POINTER_TABLE = 0x26298C;
-	auto bgmPacks = cast(ubyte[3][])data[BGM_PACK_TABLE .. BGM_PACK_TABLE + (ubyte[3]).sizeof * NUM_SONGS];
-	auto songPointers = cast(ushort[])data[SONG_POINTER_TABLE .. SONG_POINTER_TABLE + ushort.sizeof * NUM_SONGS];
+	auto packs = (cast(PackPointer[])(data[packPointerTable .. packPointerTable + NUM_PACKS * PackPointer.sizeof]))
+		.map!(x => parsePacks(data[x.full + (m2packPointers ? 0x220000 : -0xC00000) .. $]));
+	enum SONG_POINTER_TABLE = 0x294E;
+	auto bgmPacks = cast(ubyte[3][])data[packTableOffset .. packTableOffset + (ubyte[3]).sizeof * NUM_SONGS];
+	auto songPointers = cast(ushort[])packs[1][2].data[SONG_POINTER_TABLE .. SONG_POINTER_TABLE + ushort.sizeof * NUM_SONGS];
 	foreach (idx, songPacks; bgmPacks) {
-		infof("Song ID: 0x%03X", idx);
 		auto file = File(buildPath(outDir, format!"%03X.nspc"(idx)), "w").lockingBinaryWriter;
 		NSPCWriter writer;
-		const(Pack)[] getPack(ubyte pack) {
-			size_t offset = packTable[pack].full - 0xC00000;
-			return parsePacks(data[offset .. $]);
-		}
 		writer.header.songBase = songPointers[idx];
 		writer.header.instrumentBase = 0x6E00;
 		writer.header.sampleBase = 0x6C00;
 		writer.header.volumeTable = VolumeTable.hal1;
 		writer.header.releaseTable = ReleaseTable.hal1;
-		infof("Song Base: $%04X", writer.header.songBase);
 		if (songPacks[2] == 0xFF) {
-			writer.packs ~= getPack(1);
+			writer.packs ~= packs[1];
 		}
 		foreach (pack; songPacks) {
 			if (pack == 0xFF) {
 				continue;
 			}
-			infof("Song pack: $%02X ($%06X)", pack, packTable[pack].full);
-			writer.packs ~= getPack(pack);
+			writer.packs ~= packs[pack];
 		}
 		writer.tags = [
 			TagPair("album", "Earthbound"),
