@@ -17,6 +17,8 @@ import std.string;
 import std.utf;
 import bindbc.sdl : SDL_AudioCallback, SDL_AudioDeviceID;
 
+import midi;
+
 extern(C) int kbhit();
 extern(C) int getch();
 
@@ -54,6 +56,7 @@ extern (C) void _sampling_func(void* user, ubyte* buf, int bufSize) nothrow {
 		throw e;
 	}
 }
+__gshared int midiChannel = 0;
 
 int main(string[] args) {
 	enum channels = 2;
@@ -67,12 +70,15 @@ int main(string[] args) {
 	string channelsEnabled = "11111111";
 	string phraseString;
 	Interpolation interpolation;
+	uint midiDevice = uint.max;
 	if (args.length < 2) {
 		return 1;
 	}
 
 	auto help = getopt(args,
 		"c|channels", "Enables/disables channels", &channelsEnabled,
+		"m|mididevice", "Opens a midi device for input", &midiDevice,
+		"q|midichannel", "MIDI channel offset for midi device", &midiChannel,
 		"f|samplerate", "Sets sample rate (Hz)", &sampleRate,
 		"i|interpolation", "Sets interpolation (linear, gaussian, sinc, cubic)", &interpolation,
 		"b|brrdump", "Dumps BRR samples used", &dumpBRRFiles,
@@ -191,6 +197,36 @@ int main(string[] args) {
 		}
 		trace("SDL audio init success");
 
+		static void midiCallback(NSPCPlayer* player, MidiEvent event) {
+			import std.algorithm.comparison : min;
+			const channel = min(cast(ubyte)(midiChannel + (event.eventType & 0xF)), ubyte(7));
+			switch (event.type) {
+				case EventType.noteOn:
+					if (event.param2 > 0) {
+						const command = Command(cast(ubyte)(event.param1 + (2 - 4) * 12), 0, VCMDClass.note);
+						player.executeCommand(channel, command);
+					} else {
+						const command = Command(0, 0, VCMDClass.noteDuration);
+						player.executeCommand(channel, command);
+					}
+					break;
+				case EventType.noteOff:
+					const command = Command(0, 0, VCMDClass.noteDuration);
+					player.executeCommand(channel, command);
+					break;
+				default:
+					tracef("MIDI event: %s", event);
+					break;
+			}
+		}
+
+		if (midiDevice != midiDevice.max) {
+			try {
+				openMidiInDevice!midiCallback(midiDevice, &nspc);
+			} catch (Exception e) {
+				errorf("Could not open MIDI device %s: %s", midiDevice, e.msg);
+			}
+		}
 
 		writeln("Press enter to exit");
 		while(true) {
