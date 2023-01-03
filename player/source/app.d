@@ -223,6 +223,7 @@ int main(string[] args) {
 		if (midiDevice != midiDevice.max) {
 			try {
 				openMidiInDevice!midiCallback(midiDevice, &nspc);
+				infof("Opened MIDI device: %s", getMidiInDeviceName(midiDevice));
 			} catch (Exception e) {
 				errorf("Could not open MIDI device %s: %s", midiDevice, e.msg);
 			}

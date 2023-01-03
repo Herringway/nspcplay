@@ -17,6 +17,13 @@ private string outputMidiError(uint err) {
 	midiInGetErrorTextW(err, &errmsg[0], 255);
 	return errmsg.fromStringz.toUTF8;
 }
+string getMidiInDeviceName(uint id) {
+	import std.string : fromStringz;
+	import std.utf : toUTF8;
+	MIDIINCAPS caps;
+	const result = midiInGetDevCapsW(id, &caps, caps.sizeof);
+	return caps.szPname.fromStringz().toUTF8;
+}
 
 void closeMidiInDevice() {
 	if (hMidiIn != null) {
