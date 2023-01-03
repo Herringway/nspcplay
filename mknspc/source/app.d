@@ -111,6 +111,18 @@ NSPCWriter buildNSPCFromSPC(string[] args, out string filename) {
 			infof("Detected custom instruments: %04X", writer.header.extra.customInstruments);
 		}
 	}
+	const id666 = (cast(ID666Tags[])spcFile[0x2E .. 0x100])[0];
+	void addTag(string tag, const char[] value) {
+		if (value != "") {
+			writer.tags ~= TagPair(tag, value.idup);
+		}
+	}
+	addTag("title", id666.text.songTitle.fromStringz);
+	addTag("album", id666.text.gameTitle.fromStringz);
+	addTag("artist", id666.text.songArtist.fromStringz);
+	addTag("comment", id666.text.comments.fromStringz);
+	string[ubyte] emulators = [1: "ZSNES", 2: "SNES9x"];
+	addTag("emulator", emulators.get(id666.text.emulator, ""));
 	writer.packs ~= Pack(0, spcFile[0x100 .. 0x100FF]);
 	return writer;
 }
@@ -182,4 +194,39 @@ class HelpWantedException : Exception {
 		this.options = opts;
 		super("Help wanted!", file, line);
 	}
+}
+
+union ID666Tags {
+	TextID666Tags text;
+	BinaryID666Tags binary;
+}
+
+struct TextID666Tags {
+	align(1):
+	char[32] songTitle;
+	char[32] gameTitle;
+	char[16] dumperName;
+	char[32] comments;
+	char[11] dumpDate;
+	char[3] fadeStart;
+	char[5] fadeLength;
+	char[32] songArtist;
+	ubyte defaultChannelEnables;
+	ubyte emulator;
+	ubyte[45] reserved;
+}
+struct BinaryID666Tags {
+	align(1):
+	char[32] songTitle;
+	char[32] gameTitle;
+	char[16] dumperName;
+	char[32] comments;
+	ubyte[4] dumpDate;
+	ubyte[7] reserved;
+	char[3] fadeStart;
+	char[4] fadeLength;
+	char[32] songArtist;
+	ubyte defaultChannelEnables;
+	ubyte emulator;
+	ubyte[46] reserved2;
 }
