@@ -872,34 +872,47 @@ struct NSPCPlayer {
 			inRemote = false;
 		}
 	}
+	/// Executes vcmds until either a terminator or a note is reached
 	private bool execute(ref Parser parser, ref ChannelState channel, ref SongState song) nothrow pure @safe {
 		while (1) {
 			bool done;
 			const command = parser.popCommand(*currentSong, done);
-			final switch (command.type) {
-				case VCMDClass.terminator:
-					if (done) {
-						return false;
-					}
-					break;
-				case VCMDClass.noteDuration:
-					channel.noteLength = command.noteDuration;
-					if (command.parameters.length > 0) {
-						channel.noteStyle = command.parameters[0];
-					}
-					break;
-				case VCMDClass.note:
-				case VCMDClass.tie:
-				case VCMDClass.rest:
-				case VCMDClass.percussion:
-					channel.next = channel.noteLength - 1;
-					doNote(song, channel, command);
-					return true;
-				case VCMDClass.special:
-					doCommand(song, channel, command);
-					break;
+			if (executeCommand(channel, song, command, done)) {
+				return done;
 			}
 		}
+	}
+	private bool executeCommand(ref ChannelState channel, ref SongState song, const Command command, ref bool done) nothrow pure @safe {
+		final switch (command.type) {
+			case VCMDClass.terminator:
+				if (done) {
+					done = false;
+					return true;
+				}
+				break;
+			case VCMDClass.noteDuration:
+				channel.noteLength = command.noteDuration;
+				if (command.parameters.length > 0) {
+					channel.noteStyle = command.parameters[0];
+				}
+				break;
+			case VCMDClass.note:
+			case VCMDClass.tie:
+			case VCMDClass.rest:
+			case VCMDClass.percussion:
+				channel.next = channel.noteLength - 1;
+				doNote(song, channel, command);
+				done = true;
+				return true;
+			case VCMDClass.special:
+				doCommand(song, channel, command);
+				break;
+		}
+		return false;
+	}
+	public void executeCommand(ubyte channel, const Command command) nothrow pure @safe {
+		bool _;
+		executeCommand(state.channels[channel], state, command, _);
 	}
 
 	// $07F9 + $0625
