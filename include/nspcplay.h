@@ -1,5 +1,9 @@
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct NSPCPlayer;
 struct Song;
 
@@ -17,3 +21,7 @@ void nspcplaySetLooping(struct NSPCPlayer* player, int32_t enabled);
 void nspcplaySetChannelEnabled(struct NSPCPlayer* player, uint8_t channel, int32_t enabled);
 int32_t nspcplayIsPlaying(struct NSPCPlayer const * player);
 char const * const nspcplayGetError();
+
+#ifdef __cplusplus
+}
+#endif
