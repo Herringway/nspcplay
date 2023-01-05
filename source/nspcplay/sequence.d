@@ -587,10 +587,6 @@ struct Command {
 	}
 }
 
-Command readCommand(Variant variant, return scope const(ubyte)[] p) nothrow @safe pure {
-	size_t _;
-	return readCommand(variant, p, _);
-}
 Command readCommand(Variant variant, return scope const(ubyte)[] p, out size_t readBytes) nothrow @safe pure {
 	Command command;
 	command.type = getCommandClass(variant, p[0], command._cmdBase);
