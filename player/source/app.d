@@ -119,9 +119,6 @@ int main(string[] args) {
 		stderr.writeln("Channel string must be exactly 8 characters long!");
 		return 1;
 	}
-	foreach (idx, channel; channelsEnabled) {
-		nspc.setChannelEnabled(cast(ubyte)idx, channel != '0');
-	}
 	nspc.setSpeed(speed);
 
 	nspc.interpolation = interpolation;
@@ -157,6 +154,9 @@ int main(string[] args) {
 	}
 
 	nspc.loadSong(song);
+	foreach (idx, channel; channelsEnabled) {
+		nspc.setChannelEnabled(cast(ubyte)idx, channel != '0');
+	}
 	nspc.play();
 	trace("Playing NSPC music");
 
