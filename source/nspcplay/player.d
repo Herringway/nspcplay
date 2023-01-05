@@ -14,7 +14,7 @@ import std.typecons;
 enum uint nativeSamplingRate = 32000;
 
 private struct SongState {
-	ChannelState[8] channels;
+	ChannelState[] channels;
 	byte transpose;
 	Slider volume = Slider(0xC000);
 	Slider tempo;
@@ -300,10 +300,10 @@ void doEcho(ref SongState state, ref short leftSample, ref short rightSample, in
 
 	int inLeft = 0;
 	int inRight = 0;
-	for(int i = 0; i < 8; i++) {
-		if(state.channels[i].echoEnabled) {
-			inLeft += cast(short)((state.channels[i].lastSample * state.channels[i].leftVolume) / 128.0);
-			inRight += cast(short)((state.channels[i].lastSample * state.channels[i].rightVolume) / 128.0);
+	foreach(channel; state.channels) {
+		if(channel.echoEnabled) {
+			inLeft += cast(short)((channel.lastSample * channel.leftVolume) / 128.0);
+			inRight += cast(short)((channel.lastSample * channel.rightVolume) / 128.0);
 			inLeft = clamp(inLeft, short.min, short.max);
 			inRight = clamp(inRight, short.min, short.max);
 		}
@@ -811,6 +811,7 @@ struct NSPCPlayer {
 				assert(0, "Not yet implemented");
 			case PhraseType.pattern:
 				const trackList = currentSong.trackLists[nextPhrase.id];
+				state.channels.length = max(state.channels.length, trackList.length);
 				foreach (idx, ref channel; state.channels) {
 					channel.parser.sequenceData = assumeWontThrow(currentSong.tracks.get(trackList[idx], []));
 					channel.parser.subroutineCount = 0;
@@ -1053,9 +1054,9 @@ struct NSPCPlayer {
 			songPlaying = false;
 		}
 		state.tempo.current = currentSong.defaultTempo << 8;
-		foreach (channel; 0 ..8) {
+		foreach (idx, channel; state.channels) {
 			// disable any channels that are disabled by default
-			state.channels[channel].enabled ^= !(currentSong.defaultEnabledChannels() & (1 << channel));
+			channel.enabled ^= !(currentSong.defaultEnabledChannels() & (1 << idx));
 		}
 		state.enchantedReadahead = currentSong.defaultEnchantedReadahead;
 	}
