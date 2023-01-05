@@ -71,6 +71,8 @@ enum VCMD {
 	amkFA,
 	amkFB,
 	amkRemoteCommand,
+	// pseudo vcmds
+	setRelease,
 }
 
 enum ubyte variableLength = 255;
@@ -132,6 +134,8 @@ private immutable ubyte[VCMD.max + 1] codeLength = [
 	VCMD.noop0: 0,
 	VCMD.noop1: 1,
 	VCMD.noop2: 2,
+	// pseudo vcmds
+	VCMD.setRelease: 0,
 	// error
 	VCMD.invalid: 0,
 ];
@@ -570,6 +574,9 @@ struct Command {
 						break;
 					case VCMD.amkRemoteCommand:
 						sink.formattedWrite!"Remote command: address: $%04X, event: %s, wait: %s"(parameters[0] | (parameters[1] << 8), parameters[2], parameters[3]);
+						break;
+					case VCMD.setRelease:
+						sink.formattedWrite!"Set release: %s ticks"(parameters[0]);
 						break;
 					case VCMD.invalid:
 						put(sink, "Invalid command");

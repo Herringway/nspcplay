@@ -138,6 +138,8 @@ private struct ChannelState {
 	ushort semitoneTune;
 	ubyte volumeBoost;
 	ushort[ubyte] remotes;
+	// Pseudo VCMD state
+	Nullable!ubyte releaseOverride;
 	void setADSRPhase(ADSRPhase phase) @safe pure nothrow {
 		adsrCounter = 0;
 		adsrPhase = phase;
@@ -684,6 +686,9 @@ struct NSPCPlayer {
 					c.remotes[command.parameters[2]] = read!ushort(command.parameters[]);
 				}
 				break;
+			case VCMD.setRelease:
+				c.releaseOverride = command.parameters[0];
+				break;
 			case VCMD.konamiE4: // ???
 			case VCMD.konamiE7: // ???
 			case VCMD.konamiF5: // ???
@@ -762,7 +767,7 @@ struct NSPCPlayer {
 			rel = c.noteLength;
 		} else {
 			const releaseTable = st.useAltRTable ? currentSong.altReleaseTable : currentSong.releaseTable;
-			rel = (c.noteLength * releaseTable[c.noteStyle >> 4]) >> 8;
+			rel = (c.noteLength * c.releaseOverride.get(releaseTable[c.noteStyle >> 4])) >> 8;
 			if (rel > c.noteLength - 2) {
 				rel = c.noteLength - 2;
 			}
