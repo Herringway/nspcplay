@@ -84,7 +84,7 @@ struct Song {
 	ushort address;
 	const(Phrase)[] order;
 	ushort[8][ushort] trackLists;
-	const(ubyte)[][ushort] tracks;
+	const(Command)[][ushort] tracks;
 	const(ubyte[8])[] firCoefficients;
 	ubyte[8] releaseTable;
 	/// Alternative release table to use when switch command is used (AMK)
@@ -162,13 +162,12 @@ struct Song {
 			}
 		}
 	}
-	private void validateTrack(scope const ubyte[] track, bool isSub, ref ubyte tmpPercussionBase) @safe {
-		const(ubyte)[] data = track;
+	private void validateTrack(scope const Command[] track, bool isSub, ref ubyte tmpPercussionBase) @safe {
+		const(Command)[] data = track;
 		bool endReached;
 		while (data.length > 0) {
-			size_t length;
-			const command = readCommand(variant, data, length);
-			data = data[length .. $];
+			const command = data[0];
+			data = data[1 .. $];
 			enforce!NSPCException(!endReached, "Track must end with terminator");
 			final switch (command.type) {
 				case VCMDClass.terminator:
@@ -240,16 +239,15 @@ struct Song {
 	void toString(S)(ref S sink) const {
 		import std.format : formattedWrite;
 		import std.range : put;
-		void printSequence(const(ubyte)[] data) {
+		void printSequence(const(Command)[] data) {
 			bool done;
 			while((data.length > 0) && (!done)) {
-				size_t nextOffset;
-				const command = readCommand(variant, data, nextOffset);
+				const command = data[0];
 				sink.formattedWrite!"%x\n"(command);
 				if (command.type == VCMDClass.terminator) {
 					done = true;
 				}
-				data = data[nextOffset .. $];
+				data = data[1 .. $];
 			}
 		}
 		sink.formattedWrite!"Phrases: %s\n"(order);
@@ -473,13 +471,15 @@ private void decompileSong(scope ubyte[] data, ref Song song) @safe {
 		}
 	}
 }
-private const(ubyte)[] decompileTrack(immutable(ubyte)[] data, ushort start, ref Song song, ref ubyte tmpPercussionBase, bool recurse) @safe {
+private const(Command)[] decompileTrack(immutable(ubyte)[] data, ushort start, ref Song song, ref ubyte tmpPercussionBase, bool recurse) @safe {
+	const(Command)[] track;
 	// Determine the end of the track.
 	const(ubyte)[] trackEnd = data[start .. $];
 	size_t totalLength;
 	while (true) {
 		size_t length;
 		const command = readCommand(song.variant, trackEnd, length);
+		track ~= command;
 		trackEnd = trackEnd[length .. $];
 		totalLength += length;
 		if (command.type == VCMDClass.terminator) {
@@ -496,8 +496,6 @@ private const(ubyte)[] decompileTrack(immutable(ubyte)[] data, ushort start, ref
 			song.tracks.require(subPtr, decompileTrack(data, subPtr, song, tmpPercussionBase, false));
 		}
 	}
-	const track = data[start .. start + totalLength];
-
 	song.validateTrack(track, false, tmpPercussionBase);
 	return track;
 }

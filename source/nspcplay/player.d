@@ -167,15 +167,15 @@ private struct ChannelState {
 }
 
 private struct Parser {
-	const(ubyte)[] sequenceData;
+	const(Command)[] sequenceData;
 	/// the sequence data that will be restored upon return from subroutine
-	const(ubyte)[] subroutineReturnData;
+	const(Command)[] subroutineReturnData;
 	/// Starting address of the subroutine
 	ushort subroutineStartAddress;
 	/// Number of times to repeat the subroutine
 	ubyte subroutineCount;
 	/// Sequence data at  the start of a loop
-	const(ubyte)[] loopStart;
+	const(Command)[] loopStart;
 	/// Number of times to loop
 	ubyte loopCount = 0xFF;
 	Command popCommand(const Song song) nothrow @safe pure {
@@ -183,19 +183,18 @@ private struct Parser {
 		return popCommand(song, _);
 	}
 	Command popCommand(const Song song, out bool done, bool followSubroutines = true) nothrow @safe pure {
-		size_t nextOffset;
-		const command = readCommand(song.variant, sequenceData, nextOffset);
+		const command = sequenceData[0];
 		if (command.type == VCMDClass.terminator) {
 			done = subroutineCount == 0;
 			if (!done) {
 				sequenceData = --subroutineCount ? song.tracks[subroutineStartAddress] : subroutineReturnData;
 			}
 		} else if ((command.type == VCMDClass.special) && (command.special == VCMD.konamiLoopStart)) {
-			sequenceData = sequenceData[nextOffset .. $];
+			sequenceData = sequenceData[1 .. $];
 			loopStart = sequenceData[];
 		} else if ((command.type == VCMDClass.special) && (command.special == VCMD.amkSubloop)) {
 			if (command.parameters[0] == 0) {
-				sequenceData = sequenceData[nextOffset .. $];
+				sequenceData = sequenceData[1 .. $];
 				loopStart = sequenceData[];
 			} else {
 				if (loopCount == 0xFF) {
@@ -206,7 +205,7 @@ private struct Parser {
 					loopCount--;
 				} else {
 					loopCount = 0xFF;
-					sequenceData = sequenceData[nextOffset .. $];
+					sequenceData = sequenceData[1 .. $];
 				}
 			}
 		} else if ((command.type == VCMDClass.special) && (command.special == VCMD.konamiLoopEnd)) {
@@ -218,15 +217,15 @@ private struct Parser {
 				loopCount--;
 			} else {
 				loopCount = 0xFF;
-				sequenceData = sequenceData[nextOffset .. $];
+				sequenceData = sequenceData[1 .. $];
 			}
 		} else if (followSubroutines && (command.type == VCMDClass.special) && (command.special == VCMD.subRoutine)) {
-			subroutineReturnData = sequenceData[nextOffset .. $];
+			subroutineReturnData = sequenceData[1 .. $];
 			subroutineStartAddress = read!ushort(command.parameters);
 			subroutineCount = command.parameters[2];
 			sequenceData = song.tracks[subroutineStartAddress];
 		} else {
-			sequenceData = sequenceData[nextOffset .. $];
+			sequenceData = sequenceData[1 .. $];
 		}
 		return command;
 	}
@@ -936,7 +935,7 @@ struct NSPCPlayer {
 			// $0B84
 			if (channel.note.cycles == 0) {
 				size_t length;
-				const command = readCommand(currentSong.variant, channel.parser.sequenceData, length);
+				const command = channel.parser.sequenceData[0];
 				if (command.special == VCMD.pitchSlideToNote) {
 					doCommand(st, channel, command);
 					channel.parser.popCommand(*currentSong);
