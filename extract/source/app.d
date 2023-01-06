@@ -7,7 +7,15 @@ align(1) struct PackPointer {
 	align(1):
 	ubyte bank;
 	ushort addr;
-	uint full() {
+	uint full() const {
+		return addr + ((cast(uint)bank) << 16);
+	}
+}
+align(1) static struct PackPointerLH {
+	align(1):
+	ushort addr;
+	ubyte bank;
+	uint full() const {
 		return addr + ((cast(uint)bank) << 16);
 	}
 }
@@ -29,6 +37,8 @@ int main(string[] args) {
 		extractSMW(rom.data, args[2]);
 	} else if (rom.title == "THE LEGEND OF ZELDA  ") {
 		extractZ3(rom.data, args[2]);
+	} else if (rom.title == "Super Metroid        ") {
+		extractSMET(rom.data, args[2]);
 	} else {
 		writefln!"I don't know what '%s' is."(rom.title);
 		return 1;
@@ -61,14 +71,6 @@ ROMFile readROM(string path) {
 
 void extractEarthbound(const scope ubyte[] data, bool m2packPointers, size_t packPointerTable, size_t packTableOffset, string outDir) {
 	static immutable string[] titles = import("eb.txt").split("\n");
-	align(1) static struct PackPointer {
-		align(1):
-		ubyte bank;
-		ushort addr;
-		uint full() {
-			return addr + ((cast(uint)bank) << 16);
-		}
-	}
 	enum NUM_SONGS = 0xBF;
 	enum NUM_PACKS = 0xA9;
 	auto packs = (cast(PackPointer[])(data[packPointerTable .. packPointerTable + NUM_PACKS * PackPointer.sizeof]))
@@ -141,18 +143,10 @@ uint loromToPC(uint addr) @safe pure {
 }
 
 void extractKSS(const scope ubyte[] data, string outDir) {
-	align(1) static struct PackPointer {
-		align(1):
-		ushort addr;
-		ubyte bank;
-		uint full() {
-			return addr + ((cast(uint)bank) << 16);
-		}
-	}
 	enum PACK_POINTER_TABLE = 0x5703;
 	enum InstrumentPackTable = 0x57E7;
 	enum numSongs = 65;
-	auto packTable = cast(PackPointer[])(data[PACK_POINTER_TABLE .. PACK_POINTER_TABLE + (numSongs + 10) * PackPointer.sizeof]);
+	auto packTable = cast(PackPointerLH[])(data[PACK_POINTER_TABLE .. PACK_POINTER_TABLE + (numSongs + 10) * PackPointerLH.sizeof]);
 	auto sfxPacks = data[InstrumentPackTable .. InstrumentPackTable + numSongs];
 	const progOffset = packTable[0].full - 0xC00000;
 	const progPack = parsePacks(data[progOffset .. $]);
@@ -263,5 +257,50 @@ void extractZ3(const scope ubyte[] data, string outDir) {
 			writer.toBytes(file);
 		}
 		songID++;
+	}
+}
+
+void extractSMET(const scope ubyte[] data, string outDir) {
+	//enum pack1Offset = 0x278000;
+	enum songTableOffset = 0x5820;
+	enum songs = 25;
+	enum packTableOffset = 0x7E7E1;
+	const table = cast(const(PackPointerLH)[])(data[packTableOffset .. packTableOffset + songs * PackPointerLH.sizeof]);
+	const first = parsePacks(data[loromToPC(table[0].full) .. $]);
+	const firCoefficients = cast(const(ubyte[8])[])(first[2].data[0x1E32 - 0x1500 .. 0x1E32 - 0x1500 + 8 * 11]); //there only seem to be 4, but songs are relying on an invalid 11th preset?
+	foreach (idx, pack; table) {
+		const packs = parsePacks(data[loromToPC(pack.full) .. $]);
+		const(ushort)[] subSongs;
+		foreach (sp; packs) {
+			if (sp.address == 0x5820) { // initial pack contains 4 'always loaded' songs
+				subSongs = cast(const(ushort)[])(sp.data[0 .. 8]);
+				break;
+			}
+			if (sp.address == 0x5828) { // all other packs have a single dynamically loaded song
+				subSongs = cast(const(ushort)[])(sp.data[0 .. 2]);
+				break;
+			}
+		}
+		foreach (subSongIndex, subSong; subSongs) {
+			const filename = format!"%02X - %s.nspc"(idx, subSongIndex);
+			NSPCWriter writer;
+			writer.header.songBase = subSong;
+			writer.header.sampleBase = 0x6D00;
+			writer.header.instrumentBase = 0x6C00;
+			writer.header.variant = nspcplay.Variant.standard;
+			writer.header.volumeTable = VolumeTable.nintendo;
+			writer.header.releaseTable = ReleaseTable.nintendo;
+			if (idx > 0) {
+				writer.packs = first;
+			}
+			writer.packs ~= packs;
+			writer.tags = [
+				TagPair("album", "Super Metroid"),
+			];
+			writer.header.firCoefficientTableCount = cast(ubyte)firCoefficients.length;
+			writer.firCoefficients = firCoefficients;
+			auto file = File(buildPath(outDir, filename), "w").lockingBinaryWriter;
+			writer.toBytes(file);
+		}
 	}
 }
