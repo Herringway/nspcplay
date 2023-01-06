@@ -195,7 +195,7 @@ struct Song {
 							tmpPercussionBase = command.parameters[0];
 							break;
 						case VCMD.echoParameterSetup:
-							enforce!NSPCException(firCoefficients.length > command.parameters[2], "FIR coefficient table out of range!");
+							enforce!NSPCException(firCoefficients.length > command.parameters[2], format!"FIR coefficient table %s out of range!"(command.parameters[2]));
 							break;
 						default: //nothing to validate
 							break;
