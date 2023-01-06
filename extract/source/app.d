@@ -271,18 +271,22 @@ void extractSMET(const scope ubyte[] data, string outDir) {
 	foreach (idx, pack; table) {
 		const packs = parsePacks(data[loromToPC(pack.full) .. $]);
 		const(ushort)[] subSongs;
+		uint subSongIndex;
 		foreach (sp; packs) {
-			if (sp.address == 0x5820) { // initial pack contains 4 'always loaded' songs
-				subSongs = cast(const(ushort)[])(sp.data[0 .. 8]);
+			if (sp.address == 0x5820) { // initial pack contains 4 'always loaded' songs and one dynamic
+				subSongs = cast(const(ushort)[])(sp.data[0 .. 14]);
+				subSongIndex = 0;
 				break;
 			}
 			if (sp.address == 0x5828) { // all other packs have a single dynamically loaded song
-				subSongs = cast(const(ushort)[])(sp.data[0 .. 2]);
+				const firstSong = (cast(const(ushort)[])(sp.data[0 .. 2]))[0];
+				subSongs = cast(const(ushort)[])(sp.data[0 .. firstSong - 0x5828]);
+				subSongIndex = 4;
 				break;
 			}
 		}
-		foreach (subSongIndex, subSong; subSongs) {
-			const filename = format!"%02X - %s.nspc"(idx, subSongIndex);
+		foreach (subSong; subSongs) {
+			const filename = format!"%02X - %s.nspc"(idx, subSongIndex++);
 			NSPCWriter writer;
 			writer.header.songBase = subSong;
 			writer.header.sampleBase = 0x6D00;

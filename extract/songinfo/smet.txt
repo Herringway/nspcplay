@@ -3,21 +3,37 @@ Item Acquisition Fanfare
 Item Room
 Continue
 Opening ~ Destruction of the Space Colony
+Opening ~ Destruction of the Space Colony (no intro)
+Opening ~ Destruction of the Space Colony (unused)
+Opening ~ Destruction of the Space Colony (2)
+Opening ~ Destruction of the Space Colony (no intro) (2)
 Planet Zebes ~ Arrival on Crateria
+Planet Zebes ~ Arrival on Crateria (ambience only)
+Planet Zebes ~ Arrival on Crateria (no ambience)
 Crateria ~ The Space Pirates Appear
+Water
 Theme of Samus Aran
 Brinstar Overgrown with Vegetation Area
 Brinstar Red Soil Swampy Area
 Norfair Hot Lava Area
 Norfair Ancient Ruins Area
 Maridia Drifting Sand Underwater Area
+Maridia Rocky Underwater Area
 Tourian
+Silence
 Mother Brain
 Big Boss Confrontation 1
+Mysterious Statue Chamber
+Escape
 Big Boss Confrontation 2
+Tension
 Mini Boss Confrontation
 Space Ship
+Space Colony
+The Space Colony Explodes ~ To Planet Zebes
+The Space Colony Explodes
 Wrecked Ship
+Wrecked Ship (Activated)
 Planet Zebes Explodes
 Theme of Super Metroid
 Samus Aran's Final Cry
@@ -25,4 +41,6 @@ Ending
 "The Last Metroid is in Captivity"
 "The Galaxy is at Peace"
 Big Boss Confrontation 2 (2)
+Tension (2)
+Silence (2)
 Theme of Samus Aran (2)
