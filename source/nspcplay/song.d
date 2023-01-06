@@ -340,8 +340,11 @@ private const(ubyte)[] loadAllSubpacks(scope ubyte[] buffer, const(ubyte)[] pack
 		}
 		base = read!ushort(pack, 2);
 		debug(nspclogging) tracef("Loading subpack to %X (%s bytes)", base, size);
-		enforce!NSPCException(base + size <= ushort.max, "Invalid pack - base + size exceeds 64KB memory limit");
-		buffer[base .. base + size] = pack[4 .. size + 4];
+		if (size + base > 65535) {
+			infof("Loading %s bytes to $%04X will overflow - truncating", size, base);
+		}
+		const truncated = min(65535, base + size) - base;
+		buffer[base .. base + truncated] = pack[4 .. truncated + 4];
 		pack = pack[size + 4 .. $];
 	}
 	return pack[2 .. $];
