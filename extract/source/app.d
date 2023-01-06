@@ -261,13 +261,13 @@ void extractZ3(const scope ubyte[] data, string outDir) {
 }
 
 void extractSMET(const scope ubyte[] data, string outDir) {
-	//enum pack1Offset = 0x278000;
-	enum songTableOffset = 0x5820;
+	static immutable string[] titles = import("smet.txt").split("\n");
 	enum songs = 25;
 	enum packTableOffset = 0x7E7E1;
 	const table = cast(const(PackPointerLH)[])(data[packTableOffset .. packTableOffset + songs * PackPointerLH.sizeof]);
 	const first = parsePacks(data[loromToPC(table[0].full) .. $]);
 	const firCoefficients = cast(const(ubyte[8])[])(first[2].data[0x1E32 - 0x1500 .. 0x1E32 - 0x1500 + 8 * 11]); //there only seem to be 4, but songs are relying on an invalid 11th preset?
+	uint songID = 0;
 	foreach (idx, pack; table) {
 		const packs = parsePacks(data[loromToPC(pack.full) .. $]);
 		const(ushort)[] subSongs;
@@ -296,6 +296,7 @@ void extractSMET(const scope ubyte[] data, string outDir) {
 			writer.packs ~= packs;
 			writer.tags = [
 				TagPair("album", "Super Metroid"),
+				TagPair("title", titles[songID++]),
 			];
 			writer.header.firCoefficientTableCount = cast(ubyte)firCoefficients.length;
 			writer.firCoefficients = firCoefficients;
