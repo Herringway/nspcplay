@@ -2,6 +2,26 @@ import std;
 import std.experimental.logger;
 
 import nspcplay;
+import siryul;
+
+struct SongMetadata {
+	string album;
+	TrackMetadata[] tracks;
+	TagPair[] tags(size_t songID) const {
+		with (tracks[songID]) {
+			return [
+				TagPair("album", album),
+				TagPair("title", title),
+				TagPair("artist", artist),
+			];
+		}
+	}
+}
+
+struct TrackMetadata {
+	string title;
+	string artist;
+}
 
 align(1) struct PackPointer {
 	align(1):
@@ -70,7 +90,7 @@ ROMFile readROM(string path) {
 }
 
 void extractEarthbound(const scope ubyte[] data, bool m2packPointers, size_t packPointerTable, size_t packTableOffset, string outDir) {
-	static immutable string[] titles = import("eb.txt").split("\n");
+	static immutable metadata = import("eb.json").fromString!(SongMetadata, JSON, DeSiryulize.optionalByDefault);
 	enum NUM_SONGS = 0xBF;
 	enum NUM_PACKS = 0xA9;
 	auto packs = (cast(PackPointer[])(data[packPointerTable .. packPointerTable + NUM_PACKS * PackPointer.sizeof]))
@@ -95,15 +115,13 @@ void extractEarthbound(const scope ubyte[] data, bool m2packPointers, size_t pac
 			}
 			writer.packs ~= packs[pack];
 		}
-		writer.tags = [
-			TagPair("album", "Earthbound"),
-			TagPair("title", titles[idx]),
-		];
+		writer.tags = metadata.tags(idx);
 		writer.toBytes(file);
 	}
 }
 
 void extractKDC(const scope ubyte[] data, string outDir) {
+	static immutable metadata = import("kdc.json").fromString!(SongMetadata, JSON, DeSiryulize.optionalByDefault);
 	const sequencePackPointerTable = cast(uint[])data[0x3745 .. 0x3745 + 33 * uint.sizeof];
 	const samplePackPointerTable = cast(uint[])data[0x372D .. 0x372D + 3 * uint.sizeof];
 	const instrumentPackPointerTable = cast(uint[])data[0x373B .. 0x373B + 2 * uint.sizeof];
@@ -127,9 +145,7 @@ void extractKDC(const scope ubyte[] data, string outDir) {
 			writer.packs ~= instrumentPack;
 		}
 		writer.packs ~= seqPack;
-		writer.tags = [
-			TagPair("album", "Kirby's Dream Course"),
-		];
+		writer.tags = metadata.tags(id);
 		writer.toBytes(file);
 	}
 }
@@ -143,6 +159,7 @@ uint loromToPC(uint addr) @safe pure {
 }
 
 void extractKSS(const scope ubyte[] data, string outDir) {
+	static immutable metadata = import("kss.json").fromString!(SongMetadata, JSON, DeSiryulize.optionalByDefault);
 	enum PACK_POINTER_TABLE = 0x5703;
 	enum InstrumentPackTable = 0x57E7;
 	enum numSongs = 65;
@@ -168,14 +185,13 @@ void extractKSS(const scope ubyte[] data, string outDir) {
 		writer.packs ~= progPack;
 		writer.packs ~= instrPackData;
 		writer.packs ~= seqPackData;
-		writer.tags = [
-			TagPair("album", "Kirby Super Star"),
-		];
+		writer.tags = metadata.tags(song);
 		writer.toBytes(file);
 	}
 }
 
 void extractSMW(const scope ubyte[] data, string outDir) {
+	static immutable metadata = import("smw.json").fromString!(SongMetadata, JSON, DeSiryulize.optionalByDefault);
 	enum firCoefficientsTable = 0x70DB1;
 	const progOffset = 0x70000;
 	const sfxOffset = 0x78000;
@@ -189,6 +205,7 @@ void extractSMW(const scope ubyte[] data, string outDir) {
 	const parsedSfx = parsePacks(data[sfxOffset .. $]);
 	enum tableBase = 0x135E;
 	const ubyte[8][] firCoefficients = cast(const(ubyte[8])[])(data[firCoefficientsTable .. firCoefficientsTable + 2 * 8]);
+	size_t songID;
 	foreach (bank, pack; chain(parsedProg, parsedSeq1, parsedSeq2, parsedSeq3).enumerate) {
 		if (pack.address == 0x1360) {
 			ushort currentOffset = tableBase;
@@ -214,9 +231,7 @@ void extractSMW(const scope ubyte[] data, string outDir) {
 				writer.packs ~= parsedSfx;
 				writer.packs ~= pack;
 				writer.firCoefficients = firCoefficients;
-				writer.tags = [
-					TagPair("album", "Super Mario World"),
-				];
+				writer.tags = metadata.tags(songID++);
 				writer.toBytes(file);
 				lowest = min(songAddr, lowest);
 			}
@@ -225,6 +240,7 @@ void extractSMW(const scope ubyte[] data, string outDir) {
 }
 
 void extractZ3(const scope ubyte[] data, string outDir) {
+	static immutable metadata = import("z3.json").fromString!(SongMetadata, JSON, DeSiryulize.optionalByDefault);
 	enum progOffset = 0xC8000;
 	enum songOffset2 = 0xD8000;
 	enum songOffset3 = 0xD5380;
@@ -233,6 +249,7 @@ void extractZ3(const scope ubyte[] data, string outDir) {
 	const songTable2 = cast(const(ushort)[])parsed[1][0].data[0 .. 35 * ushort.sizeof];
 	const songTable3 = cast(const(ushort)[])parsed[2][0].data[0 .. 35 * ushort.sizeof];
 	uint songID;
+	size_t trackNumber;
 	foreach (p1, p2, p3; zip(songTable.chain(0.repeat(8)), songTable2, songTable3)) {
 		foreach (idx, address; only(p1, p2, p3).enumerate) {
 			if (address == 0) {
@@ -251,9 +268,7 @@ void extractZ3(const scope ubyte[] data, string outDir) {
 			if (idx > 0) {
 				writer.packs ~= parsed[idx];
 			}
-			writer.tags = [
-				TagPair("album", "The Legend of Zelda: A Link to the Past"),
-			];
+			writer.tags = metadata.tags(trackNumber++);
 			writer.toBytes(file);
 		}
 		songID++;
@@ -261,7 +276,7 @@ void extractZ3(const scope ubyte[] data, string outDir) {
 }
 
 void extractSMET(const scope ubyte[] data, string outDir) {
-	static immutable string[] titles = import("smet.txt").split("\n");
+	static immutable metadata = import("smet.json").fromString!(SongMetadata, JSON, DeSiryulize.optionalByDefault);
 	enum songs = 25;
 	enum packTableOffset = 0x7E7E1;
 	const table = cast(const(PackPointerLH)[])(data[packTableOffset .. packTableOffset + songs * PackPointerLH.sizeof]);
@@ -298,10 +313,7 @@ void extractSMET(const scope ubyte[] data, string outDir) {
 				writer.packs = first;
 			}
 			writer.packs ~= packs;
-			writer.tags = [
-				TagPair("album", "Super Metroid"),
-				TagPair("title", titles[songID++]),
-			];
+			writer.tags = metadata.tags(songID++);
 			writer.header.firCoefficientTableCount = cast(ubyte)firCoefficients.length;
 			writer.firCoefficients = firCoefficients;
 			auto file = File(buildPath(outDir, filename), "w").lockingBinaryWriter;

@@ -5,6 +5,7 @@
 	"targetType": "executable",
 	"stringImportPaths": ["songinfo"],
 	"dependencies": {
-		"nspcplay": "*"
+		"nspcplay": "*",
+		"siryul": "*"
 	}
 }
