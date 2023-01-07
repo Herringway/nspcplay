@@ -73,6 +73,7 @@ enum VCMD {
 	amkRemoteCommand,
 	// pseudo vcmds
 	setRelease,
+	deleteTrack,
 }
 
 enum ubyte variableLength = 255;
@@ -136,6 +137,7 @@ private immutable ubyte[VCMD.max + 1] codeLength = [
 	VCMD.noop2: 2,
 	// pseudo vcmds
 	VCMD.setRelease: 0,
+	VCMD.deleteTrack: 0,
 	// error
 	VCMD.invalid: 0,
 ];
@@ -577,6 +579,9 @@ struct Command {
 						break;
 					case VCMD.setRelease:
 						sink.formattedWrite!"Set release: %s ticks"(parameters[0]);
+						break;
+					case VCMD.deleteTrack:
+						put(sink, "Delete track");
 						break;
 					case VCMD.invalid:
 						put(sink, "Invalid command");

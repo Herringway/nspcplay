@@ -178,6 +178,9 @@ private struct Parser {
 	const(Command)[] loopStart;
 	/// Number of times to loop
 	ubyte loopCount = 0xFF;
+	bool empty() const @safe pure nothrow {
+		return sequenceData.length == 0;
+	}
 	Command popCommand(const Song song) nothrow @safe pure {
 		bool _;
 		return popCommand(song, _);
@@ -377,7 +380,7 @@ struct NSPCPlayer {
 					}
 					if (offset < loadedSample.data.length) {
 						interpolationSample = loadedSample.data[offset];
-					} else if (loadedSample.data) {
+					} else if (loadedSample.data && (idx > 0)) {
 						interpolationSample = channel.interpolationBuffer[idx - 1];
 					} else { //no sample data?
 					}
@@ -688,6 +691,9 @@ struct NSPCPlayer {
 			case VCMD.setRelease:
 				c.releaseOverride = command.parameters[0];
 				break;
+			case VCMD.deleteTrack:
+				c.parser.sequenceData = [];
+				break;
 			case VCMD.konamiE4: // ???
 			case VCMD.konamiE7: // ???
 			case VCMD.konamiF5: // ???
@@ -751,7 +757,7 @@ struct NSPCPlayer {
 		{
 			auto p = c.parser;
 			bool done;
-			while (!done) {
+			while (!done && !p.empty) {
 				const tmpCommand = p.popCommand(*currentSong, done, st.enchantedReadahead);
 				if (tmpCommand.type.among(VCMDClass.note, VCMDClass.tie, VCMDClass.rest, VCMDClass.percussion)) {
 					nextNote = tmpCommand.type;
@@ -812,15 +818,20 @@ struct NSPCPlayer {
 			case PhraseType.pattern:
 				const trackList = currentSong.trackLists[nextPhrase.id];
 				state.channels.length = max(state.channels.length, trackList.length);
-				foreach (idx, ref channel; state.channels) {
-					channel.parser.sequenceData = assumeWontThrow(currentSong.tracks.get(trackList[idx], []));
-					channel.parser.subroutineCount = 0;
-					channel.volume.cycles = 0;
-					channel.panning.cycles = 0;
-					channel.next = 0;
+				foreach (idx, channel; state.channels) {
+					setChannel(idx, assumeWontThrow(currentSong.tracks.get(trackList[idx], [])));
 				}
 				break;
 		}
+	}
+	public void setChannel(size_t index, const(Command)[] commands) nothrow pure @safe {
+		state.channels[index].enabled = false;
+		state.channels[index].parser.sequenceData = commands;
+		state.channels[index].parser.subroutineCount = 0;
+		state.channels[index].volume.cycles = 0;
+		state.channels[index].panning.cycles = 0;
+		state.channels[index].next = 0;
+		state.channels[index].enabled = true;
 	}
 
 	private void doKeySweepVibratoChecks(ref ChannelState c) nothrow pure @safe {
@@ -879,13 +890,14 @@ struct NSPCPlayer {
 	}
 	/// Executes vcmds until either a terminator or a note is reached
 	private bool execute(ref Parser parser, ref ChannelState channel, ref SongState song) nothrow pure @safe {
-		while (1) {
+		while (!parser.empty) {
 			bool done;
 			const command = parser.popCommand(*currentSong, done);
 			if (executeCommand(channel, song, command, done)) {
 				return done;
 			}
 		}
+		return true;
 	}
 	private bool executeCommand(ref ChannelState channel, ref SongState song, const Command command, ref bool done) nothrow pure @safe {
 		final switch (command.type) {
@@ -923,9 +935,6 @@ struct NSPCPlayer {
 	// $07F9 + $0625
 	private bool doCycle(ref SongState st) nothrow pure @safe {
 		foreach (ref channel; st.channels) {
-			if (channel.parser.sequenceData == null) {
-				continue;
-			}
 			if (--channel.next >= 0) {
 				doKeySweepVibratoChecks(channel);
 			} else {
@@ -936,10 +945,12 @@ struct NSPCPlayer {
 			// $0B84
 			if (channel.note.cycles == 0) {
 				size_t length;
-				const command = channel.parser.sequenceData[0];
-				if (command.special == VCMD.pitchSlideToNote) {
-					doCommand(st, channel, command);
-					channel.parser.popCommand(*currentSong);
+				if (!channel.parser.empty) {
+					const command = channel.parser.sequenceData[0];
+					if (command.special == VCMD.pitchSlideToNote) {
+						doCommand(st, channel, command);
+						channel.parser.popCommand(*currentSong);
+					}
 				}
 			}
 		}
