@@ -86,7 +86,7 @@ struct Song {
 	const(Phrase)[] order;
 	ushort[8][ushort] trackLists;
 	const(Command)[][ushort] tracks;
-	const(ubyte[8])[] firCoefficients;
+	const(byte[8])[] firCoefficients;
 	ubyte[8] releaseTable;
 	/// Alternative release table to use when switch command is used (AMK)
 	ubyte[8] altReleaseTable;
@@ -330,11 +330,11 @@ private immutable ubyte[16][] volumeTables = [
 	[0x4C, 0x59, 0x6D, 0x7F, 0x87, 0x8E, 0x98, 0xA0, 0xA8, 0xB2, 0xBF, 0xCB, 0xD8, 0xE5, 0xF2, 0xFC], // HAL (Kirby Super Star)
 	[0x59, 0x66, 0x72, 0x7F, 0x87, 0x8E, 0x99, 0xA0, 0xA8, 0xB2, 0xBF, 0xCC, 0xD8, 0xE5, 0xF2, 0xFC], // HAL (Kirby's Dream Course)
 ];
-private immutable ubyte[8][] defaultFIRCoefficients = [
+private immutable byte[8][] defaultFIRCoefficients = [
 	[0x7F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-	[0x58, 0xBF, 0xDB, 0xF0, 0xFE, 0x07, 0x0C, 0x0C],
-	[0x0C, 0x21, 0x2B, 0x2B, 0x13, 0xFE, 0xF3, 0xF9],
-	[0x34, 0x33, 0x00, 0xD9, 0xE5, 0x01, 0xFC, 0xEB],
+	[0x58, -65, -37, -16, -2, 0x07, 0x0C, 0x0C],
+	[0x0C, 0x21, 0x2B, 0x2B, 0x13, -2, -13, -7],
+	[0x34, 0x33, 0x00, -39, -27, 0x01, -4, -21],
 ];
 
 const(ubyte)[] loadAllSubpacks(scope ubyte[] buffer, const(ubyte)[] pack) @safe {
@@ -360,6 +360,7 @@ const(ubyte)[] loadAllSubpacks(scope ubyte[] buffer, const(ubyte)[] pack) @safe 
 }
 /// Load an NSPC file
 Song loadNSPCFile(const(ubyte)[] data, ushort[] phrases = []) @safe {
+	import std.algorithm : filter, sum;
 	Song song;
 	ubyte[65536] buffer;
 	auto header = read!NSPCFileHeader(data);
@@ -378,7 +379,15 @@ Song loadNSPCFile(const(ubyte)[] data, ushort[] phrases = []) @safe {
 	if (header.firCoefficientTableCount == 0) {
 		song.firCoefficients = defaultFIRCoefficients;
 	} else {
-		song.firCoefficients = cast(const(ubyte[8])[])remaining[0 .. 8 * header.firCoefficientTableCount];
+		song.firCoefficients = cast(const(byte[8])[])remaining[0 .. 8 * header.firCoefficientTableCount];
+	}
+	debug(nspclogging) foreach (idx, coefficients; song.firCoefficients) {
+		if (coefficients[0 .. 7].filter!(x => x > 0).sum > 0x7F) {
+			warningf("Coefficient preset %s overflows!", idx);
+		}
+		if (coefficients[0 .. 7].filter!(x => x < 0).sum < -0x7F) {
+			warningf("Coefficient preset %s underflows!", idx);
+		}
 	}
 	song.tags = readTags(remaining[8 * header.firCoefficientTableCount .. $]);
 	foreach (tagPair; song.tags) {
@@ -590,7 +599,7 @@ struct NSPCWriter {
 		return header_[0];
 	}
 	const(Pack)[] packs;
-	const(ubyte[8])[] firCoefficients;
+	const(byte[8])[] firCoefficients;
 	const(TagPair)[] tags;
 	void toBytes(W)(ref W writer) const {
 		import std.bitmanip : nativeToLittleEndian;

@@ -13,7 +13,11 @@ import std.typecons;
 
 enum uint nativeSamplingRate = 32000;
 
+private enum left = 0;
+private enum right = 1;
 private struct SongState {
+	byte masterVolumeLeft = 112;
+	byte masterVolumeRight = 112;
 	ChannelState[] channels;
 	byte transpose;
 	Slider volume = Slider(0xC000);
@@ -24,21 +28,15 @@ private struct SongState {
 	ubyte repeatCount;
 	int phraseCounter = -1;
 
-	ubyte fadeTicks;
-	ubyte targetEchoVolumeLeft;
-	ubyte targetEchoVolumeRight;
-	bool echoWrites;
-	ubyte echoRemaining = 1;
-	ubyte echoVolumeLeft;
-	ubyte echoVolumeRight;
-	ubyte echoDelay;
-	ubyte echoFeedbackVolume;
+	Slider echoVolumeLeft;
+	Slider echoVolumeRight;
+	ushort echoBufferSize = 1;
+	byte echoFeedbackVolume;
 	ushort echoBufferIndex;
 	ubyte firBufferIndex;
-	short[15000] echoBuffer;
-	ubyte[8] firCoefficients;
-	short[8] firLeft;
-	short[8] firRight;
+	short[2][7680] echoBuffer;
+	const(byte)[] firCoefficients;
+	short[2][8] firHistory;
 	bool enchantedReadahead = true; //this is a bug that existed in the prototype, and optionally by addmusick
 	//amk state
 	bool amkFixSampleLoadTuning;
@@ -124,7 +122,7 @@ private struct ChannelState {
 	ubyte adsrRate;
 
 	short[8] interpolationBuffer;
-	short lastSample;
+	short[2] echoSamples;
 
 	bool echoEnabled;
 
@@ -283,50 +281,86 @@ void doADSR(ref ChannelState channel) nothrow @safe pure {
 	channel.gain = clamp(channel.gain, cast(short)0, cast(short)0x7FF);
 }
 
-void doEcho(ref SongState state, ref short leftSample, ref short rightSample, int mixrate) nothrow pure @safe {
-	const echoAddress = state.echoBufferIndex * 2;
-
-	state.firLeft[state.firBufferIndex] = state.echoBuffer[echoAddress % state.echoBuffer.length] >> 1;
-
-	state.firRight[state.firBufferIndex] = state.echoBuffer[(echoAddress + 1) % state.echoBuffer.length] >> 1;
-	int sumLeft = 0;
-	int sumRight = 0;
-	for(int i = 0; i < 8; i++) {
-		sumLeft += (state.firLeft[(state.firBufferIndex + i + 1) & 0x7] * state.firCoefficients[i]) >> 6;
-		sumRight += (state.firRight[(state.firBufferIndex + i + 1) & 0x7] * state.firCoefficients[i]) >> 6;
+short[2] mixEcho(ref SongState state) nothrow pure @trusted {
+	import std.range : cycle, popFrontN, take;
+	short[2] result;
+	int[2] previous;
+	state.firHistory[state.firBufferIndex] = [state.echoBuffer[state.echoBufferIndex][0] >> 1, state.echoBuffer[state.echoBufferIndex][1] >> 1];
+	auto firHistory = cycle(state.firHistory);
+	firHistory.popFrontN(state.firBufferIndex + 1);
+	foreach (idx; 0 .. state.firCoefficients.length) {
+		previous[left] += (firHistory[idx][left] * state.firCoefficients[idx]) >> 6;
+		previous[right] += (firHistory[idx][right] * state.firCoefficients[idx]) >> 6;
 	}
-	sumLeft = clamp(sumLeft, short.min, short.max);
-	sumRight = clamp(sumRight, short.min, short.max);
+	if (++state.firBufferIndex >= state.firHistory.length) {
+		state.firBufferIndex = 0;
+	}
+	previous[left] = clamp(previous[left], short.min, short.max);
+	previous[right] = clamp(previous[right], short.min, short.max);
 
-	leftSample = cast(short)clamp(leftSample + ((sumLeft * state.echoVolumeLeft) / 128.0), short.min, short.max);
-	rightSample = cast(short)clamp(rightSample + ((sumRight * state.echoVolumeRight) / 128.0), short.min, short.max);
+	previous[left] &= ~1;
+	previous[right] &= ~1;
 
-	int inLeft = 0;
-	int inRight = 0;
-	foreach(channel; state.channels) {
-		if(channel.echoEnabled) {
-			inLeft += cast(short)((channel.lastSample * channel.leftVolume) / 128.0);
-			inRight += cast(short)((channel.lastSample * channel.rightVolume) / 128.0);
-			inLeft = clamp(inLeft, short.min, short.max);
-			inRight = clamp(inRight, short.min, short.max);
+	int[2] newSample;
+	foreach (channel; state.channels) {
+		if (channel.echoEnabled) {
+			newSample[left] += channel.echoSamples[left];
+			newSample[right] += channel.echoSamples[right];
 		}
 	}
-	inLeft += cast(int)((sumLeft * state.echoFeedbackVolume) / 128.0);
-	inRight += cast(int)((sumRight * state.echoFeedbackVolume) / 128.0);
-	inLeft = clamp(inLeft * nativeSamplingRate / mixrate, short.min, short.max);
-	inRight = clamp(inRight * nativeSamplingRate / mixrate, short.min, short.max);
-	inLeft &= 0xfffe;
-	inRight &= 0xfffe;
-	if(state.echoWrites) {
-		state.echoBuffer[echoAddress] = cast(short)inLeft;
-		state.echoBuffer[echoAddress + 1] = cast(short)inRight;
+
+	result[left] = cast(short)clamp(newSample[left] + cast(short)(previous[left] * state.echoFeedbackVolume >> 7), short.min, short.max);
+	result[right] = cast(short)clamp(newSample[right] + cast(short)(previous[right] * state.echoFeedbackVolume >> 7), short.min, short.max);
+
+	result[left] &= ~1;
+	result[right] &= ~1;
+
+	foreach (idx, channel; state.channels) {
+		if (channel.echoEnabled) {
+			state.echoBuffer[state.echoBufferIndex][left] = result[left];
+			state.echoBuffer[state.echoBufferIndex][right] = result[right];
+		}
 	}
 
-	state.firBufferIndex = (state.firBufferIndex + 1) & 7;
-	state.echoBufferIndex++;
-	if(--state.echoRemaining == 0) {
-		state.echoRemaining = state.echoDelay;
+	if (++state.echoBufferIndex >= state.echoBufferSize) {
 		state.echoBufferIndex = 0;
+	}
+	return result;
+}
+
+@safe pure unittest {
+	SongState state;
+	state.firCoefficients = [127, 0, 0, 0, 0, 0, 0, 0];
+	state.echoFeedbackVolume = 60;
+	state.channels.length = 8;
+	state.echoBufferSize = 2560;
+	state.echoBufferIndex = 0;
+	state.echoBuffer[] = [-1, -1];
+	short[2] mix(short[2] chan2, short[2] chan3, short[2] chan4) {
+		state.channels[0].echoEnabled = false;
+		state.channels[0].echoSamples = [0, 0];
+		state.channels[1].echoEnabled = false;
+		state.channels[1].echoSamples = [0, 0];
+		state.channels[2].echoEnabled = true;
+		state.channels[2].echoSamples = chan2;
+		state.channels[3].echoEnabled = true;
+		state.channels[3].echoSamples = chan3;
+		state.channels[4].echoEnabled = true;
+		state.channels[4].echoSamples = chan4;
+		state.channels[5].echoEnabled = false;
+		state.channels[5].echoSamples = [0, 0];
+		state.channels[6].echoEnabled = false;
+		state.channels[6].echoSamples = [0, 0];
+		state.channels[7].echoEnabled = false;
+		state.channels[7].echoSamples = [0, 0];
+		return mixEcho(state);
+	}
+
+	import nspcplay.echotestdata;
+	foreach (id, tcase; testcases) {
+		import std.format;
+		const result = mix(tcase.data.tupleof);
+		assert(result == tcase.result, format!"Failed: %s - mix(%s) - %s != %s"(id, tcase.data, result, tcase.result));
 	}
 }
 
@@ -350,8 +384,6 @@ struct NSPCPlayer {
 	void function(scope NSPCPlayer*) @safe pure nothrow onPhraseChange;
 	///
 	short[2][] fillBuffer(short[2][] buffer) nothrow pure @safe {
-		enum left = 0;
-		enum right = 1;
 		if (!songPlaying) {
 			buffer[] = [0, 0];
 			return buffer;
@@ -368,7 +400,7 @@ struct NSPCPlayer {
 			length++;
 			int[2] tempSample;
 			foreach (i, ref channel; state.channels) {
-				const loadedSample = currentSong.samples[channel.sampleID];
+				const loadedSample = currentSong.samples[channel.sampleID & 0x7F];
 				if (!channel.enabled) {
 					continue;
 				}
@@ -391,7 +423,7 @@ struct NSPCPlayer {
 					} else { //no sample data?
 					}
 				}
-				int s1 = channel.lastSample = interpolate(interpolation, channel.interpolationBuffer[], channel.samplePosition >> 3);
+				int s1 = interpolate(interpolation, channel.interpolationBuffer[], channel.samplePosition >> 3);
 
 				if (channel.adsrRate && (++channel.adsrCounter >= cast(int)(adsrGainRates[channel.adsrRate] * (mixrate / cast(double)nativeSamplingRate)))) {
 					doADSR(channel);
@@ -404,6 +436,10 @@ struct NSPCPlayer {
 
 				tempSample[left] += cast(int)(s1 * channel.leftVolume / 128.0);
 				tempSample[right] += cast(int)(s1 * channel.rightVolume / 128.0);
+				if (channel.echoEnabled) {
+					channel.echoSamples[0] = cast(short)sample[left];
+					channel.echoSamples[1] = cast(short)sample[right];
+				}
 
 				channel.samplePosition += channel.noteFrequency;
 				if ((channel.samplePosition >> 15) >= loadedSample.data.length) {
@@ -415,9 +451,9 @@ struct NSPCPlayer {
 					}
 				}
 			}
-			sample[left] = cast(short)(clamp(tempSample[left] * currentSong.masterVolumeL / 128.0, short.min, short.max));
-			sample[right] = cast(short)(clamp(tempSample[right] * currentSong.masterVolumeR / 128.0, short.min, short.max));
-			doEcho(state, sample[0] , sample[1] , mixrate);
+			const echo = mixEcho(state);
+			sample[left] = cast(short)(clamp(cast(int)((tempSample[left] * state.masterVolumeLeft + echo[left] * cast(byte)state.echoVolumeLeft.current) / 128.0), short.min, short.max) ^ 0xFFFF);
+			sample[right] = cast(short)(clamp(cast(int)((tempSample[right] * state.masterVolumeRight + echo[right] * cast(byte)state.echoVolumeRight.current) / 128.0), short.min, short.max) ^ 0xFFFF);
 		}
 		return buffer[0 .. length];
 	}
@@ -600,8 +636,8 @@ struct NSPCPlayer {
 				foreach (idx, ref channel; st.channels) {
 					channel.echoEnabled = !!(command.parameters[0] & (1 << idx));
 				}
-				st.echoVolumeLeft = command.parameters[1];
-				st.echoVolumeRight = command.parameters[2];
+				st.echoVolumeLeft.current = command.parameters[1];
+				st.echoVolumeRight.current = command.parameters[2];
 				break;
 			case VCMD.echoOff:
 				foreach (ref channel; st.channels) {
@@ -609,14 +645,18 @@ struct NSPCPlayer {
 				}
 				break;
 			case VCMD.echoParameterSetup:
-				st.echoDelay = command.parameters[0];
+				st.echoBufferIndex = 0;
+				st.firBufferIndex = 0;
+				st.echoBuffer[] = [0,0];
+				st.firHistory[] = [0,0];
+				st.echoBufferSize = (command.parameters[0] & 0xF) * 512;
 				st.echoFeedbackVolume = command.parameters[1];
 				st.firCoefficients = currentSong.firCoefficients[command.parameters[2]];
+				debug tracef("Echo params: %s, %s, %s", st.echoBufferSize, st.echoFeedbackVolume, st.firCoefficients);
 				break;
 			case VCMD.echoVolumeFade:
-				st.fadeTicks = command.parameters[0];
-				st.targetEchoVolumeLeft = command.parameters[1];
-				st.targetEchoVolumeRight = command.parameters[2];
+				makeSlider(st.echoVolumeLeft, command.parameters[0], command.parameters[1]);
+				makeSlider(st.echoVolumeRight, command.parameters[0], command.parameters[2]);
 				break;
 			case VCMD.noop0: //do nothing
 			case VCMD.noop1: //do nothing
@@ -645,7 +685,7 @@ struct NSPCPlayer {
 				setADSRGain(c, amkADSRGain(command.parameters));
 				break;
 			case VCMD.amkSetFIR:
-				st.firCoefficients = command.parameters;
+				st.firCoefficients = cast(const(byte)[])command.parameters;
 				break;
 			case VCMD.amkSampleLoad:
 				c.sampleID = command.parameters[0];
