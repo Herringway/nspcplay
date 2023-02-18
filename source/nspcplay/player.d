@@ -343,6 +343,8 @@ struct NSPCPlayer {
 	private bool loopEnabled = true;
 
 	Interpolation interpolation = Interpolation.gaussian;
+
+	void function() @safe pure nothrow onTimerTick;
 	///
 	short[2][] fillBuffer(short[2][] buffer) nothrow pure @safe {
 		enum left = 0;
@@ -1046,6 +1048,9 @@ struct NSPCPlayer {
 				loadPattern();
 				if (!songPlaying) {
 					return false;
+				}
+				if (onTimerTick !is null) {
+					onTimerTick();
 				}
 			}
 		} else {
