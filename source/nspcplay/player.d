@@ -1104,6 +1104,9 @@ struct NSPCPlayer {
 	bool isPlaying() const pure @safe nothrow {
 		return songPlaying;
 	}
+	public void fade(ubyte ticks, ubyte targetVolume) @safe nothrow pure {
+		makeSlider(state.volume, ticks, targetVolume);
+	}
 }
 
 private bool inRange(T)(T val, T lower, T upper) {
