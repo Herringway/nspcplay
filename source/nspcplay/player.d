@@ -1063,18 +1063,20 @@ struct NSPCPlayer {
 	void initialize() nothrow pure @safe {
 		state = state.init;
 
-		state.percussionBase = cast(ubyte)currentSong.percussionBase;
-		if (currentSong.order.length) {
-			loadPattern();
-		} else {
-			songPlaying = false;
+		if (currentSong) {
+			state.percussionBase = cast(ubyte)currentSong.percussionBase;
+			if (currentSong.order.length) {
+				loadPattern();
+			} else {
+				songPlaying = false;
+			}
+			state.tempo.current = currentSong.defaultTempo << 8;
+			foreach (idx, channel; state.channels) {
+				// disable any channels that are disabled by default
+				channel.enabled ^= !(currentSong.defaultEnabledChannels() & (1 << idx));
+			}
+			state.enchantedReadahead = currentSong.defaultEnchantedReadahead;
 		}
-		state.tempo.current = currentSong.defaultTempo << 8;
-		foreach (idx, channel; state.channels) {
-			// disable any channels that are disabled by default
-			channel.enabled ^= !(currentSong.defaultEnabledChannels() & (1 << idx));
-		}
-		state.enchantedReadahead = currentSong.defaultEnchantedReadahead;
 	}
 	this(int sampleRate) nothrow pure @safe {
 		mixrate = sampleRate;
