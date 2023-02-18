@@ -95,11 +95,10 @@ void extractEarthbound(const scope ubyte[] data, bool m2packPointers, size_t pac
 	enum NUM_PACKS = 0xA9;
 	auto packs = (cast(PackPointer[])(data[packPointerTable .. packPointerTable + NUM_PACKS * PackPointer.sizeof]))
 		.map!(x => parsePacks(data[x.full + (m2packPointers ? 0x220000 : -0xC00000) .. $]));
-	enum SONG_POINTER_TABLE = 0x294E;
+	enum SONG_POINTER_TABLE = 0x294A;
 	auto bgmPacks = cast(ubyte[3][])data[packTableOffset .. packTableOffset + (ubyte[3]).sizeof * NUM_SONGS];
 	auto songPointers = cast(ushort[])packs[1][2].data[SONG_POINTER_TABLE .. SONG_POINTER_TABLE + ushort.sizeof * NUM_SONGS];
 	foreach (idx, songPacks; bgmPacks) {
-		auto file = File(buildPath(outDir, format!"%03X.nspc"(idx)), "w").lockingBinaryWriter;
 		NSPCWriter writer;
 		writer.header.songBase = songPointers[idx];
 		writer.header.instrumentBase = 0x6E00;
@@ -116,7 +115,12 @@ void extractEarthbound(const scope ubyte[] data, bool m2packPointers, size_t pac
 			writer.packs ~= packs[pack];
 		}
 		writer.tags = metadata.tags(idx);
-		writer.toBytes(file);
+		Appender!(ubyte[]) buffer;
+		writer.toBytes(buffer);
+		infof("[%04X]", songPointers[idx]);
+		infof("Writing %03X.nspc", idx);
+		const loadedSong = loadNSPCFile(buffer.data);
+		File(buildPath(outDir, format!"%03X.nspc"(idx)), "w").rawWrite(buffer.data);
 	}
 }
 
