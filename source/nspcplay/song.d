@@ -328,7 +328,7 @@ private immutable ubyte[8][] defaultFIRCoefficients = [
 	[0x34, 0x33, 0x00, 0xD9, 0xE5, 0x01, 0xFC, 0xEB],
 ];
 
-private const(ubyte)[] loadAllSubpacks(scope ubyte[] buffer, const(ubyte)[] pack) @safe {
+const(ubyte)[] loadAllSubpacks(scope ubyte[] buffer, const(ubyte)[] pack) @safe {
 	ushort size, base;
 	while (true) {
 		if (pack.length == 0) {
