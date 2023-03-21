@@ -336,6 +336,7 @@ struct NSPCPlayer {
 
 	package const(Song)* currentSong;
 	private SongState state;
+	private SongState backupState;
 	private int mixrate = nativeSamplingRate;
 	private int timerSpeed = defaultSpeed;
 	private bool songPlaying;
@@ -344,7 +345,8 @@ struct NSPCPlayer {
 
 	Interpolation interpolation = Interpolation.gaussian;
 
-	void function() @safe pure nothrow onTimerTick;
+	size_t onTimerTicksLeft;
+	void function(scope NSPCPlayer*) @safe pure nothrow onTimerTick;
 	///
 	short[2][] fillBuffer(short[2][] buffer) nothrow pure @safe {
 		enum left = 0;
@@ -820,6 +822,7 @@ struct NSPCPlayer {
 			case PhraseType.pattern:
 				const trackList = currentSong.trackLists[nextPhrase.id];
 				state.channels.length = max(state.channels.length, trackList.length);
+				backupState.channels.length = state.channels.length;
 				foreach (idx, channel; state.channels) {
 					setChannel(idx, assumeWontThrow(currentSong.tracks.get(trackList[idx], [])));
 				}
@@ -1049,8 +1052,13 @@ struct NSPCPlayer {
 				if (!songPlaying) {
 					return false;
 				}
+			}
+			if (onTimerTicksLeft > 0) {
+				onTimerTicksLeft--;
+			} else {
 				if (onTimerTick !is null) {
-					onTimerTick();
+					onTimerTick(&this);
+					onTimerTick = null;
 				}
 			}
 		} else {
@@ -1112,7 +1120,56 @@ struct NSPCPlayer {
 		return songPlaying;
 	}
 	public void fade(ubyte ticks, ubyte targetVolume) @safe nothrow pure {
+		backupState.volume = state.volume;
 		makeSlider(state.volume, ticks, targetVolume);
+	}
+	public void tempo(ubyte tempo) @safe nothrow pure {
+		backupState.tempo = state.tempo;
+		state.tempo.current = cast(ushort)(tempo << 8);
+	}
+	public void restoreTempo() @safe nothrow pure {
+		state.tempo = backupState.tempo;
+	}
+	public ubyte tempo() @safe nothrow pure {
+		return state.tempo.current >> 8;
+	}
+	public void volume(ubyte volume) @safe nothrow pure {
+		backupState.volume = state.volume;
+		state.volume.current = cast(ushort)(volume << 8);
+	}
+	public void restoreVolume() @safe nothrow pure {
+		state.volume = backupState.volume;
+	}
+	public ubyte volume() @safe nothrow pure {
+		return state.volume.current >> 8;
+	}
+	public void setChannelVolume(ubyte channel, ubyte volume) @safe nothrow pure {
+		if (channel < state.channels.length) {
+			backupState.channels[channel].volume = state.channels[channel].volume;
+			state.channels[channel].volume.current = cast(ushort)(volume << 8);
+		}
+	}
+	public void restoreChannelVolume(ubyte channel) @safe nothrow pure {
+		if (channel < state.channels.length) {
+			state.channels[channel].volume = backupState.channels[channel].volume;
+		}
+	}
+	public ubyte getChannelVolume(ubyte channel) @safe nothrow pure {
+		if (channel < state.channels.length) {
+			return state.channels[channel].volume.current >> 8;
+		}
+		return 0;
+	}
+	public void transpose(ubyte transpose) @safe nothrow pure {
+		backupState.transpose = state.transpose;
+		state.transpose = transpose;
+	}
+	public void restoreTranspose() @safe nothrow pure {
+		state.transpose = backupState.transpose;
+	}
+	public void addTimer(size_t ticks, typeof(onTimerTick) func) @safe nothrow pure {
+		onTimerTicksLeft = ticks;
+		onTimerTick = func;
 	}
 }
 
