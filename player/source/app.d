@@ -1,4 +1,5 @@
 import nspcplay;
+import nspcplay.util;
 
 import std.algorithm.comparison;
 import std.algorithm.iteration;
@@ -124,29 +125,61 @@ int main(string[] args) {
 	nspc.interpolation = interpolation;
 	if (replaceSamples != "") {
 		foreach(idx, sample; song.getSamples) {
-			const glob = format!"%s.*.brr.wav"(sample.hash.toHexString);
+			const glob = format!"%s.brr.wav"(sample.hash.toHexString);
 			auto matched = dirEntries(replaceSamples, glob, SpanMode.shallow);
 			if (!matched.empty) {
-				WAVFile header;
 				int newLoop;
-				if (auto loopSplit1 = matched.front.name.findSplit(".")) {
-					if (auto loopSplit2 = loopSplit1[2].findSplit(".")) {
-						newLoop = loopSplit2[0].to!int;
+				uint loopEnd;
+				short[] newSample;
+				auto data = cast(ubyte[])read(matched.front.name);
+				auto riffFile = RIFFFile(data);
+				bool validated;
+				bool downMix;
+				foreach (chunk; riffFile.chunks) {
+					if (chunk.fourCC == "fmt ") {
+						const wavHeader = readWaveHeader(chunk.data);
+						if (wavHeader.channels == 2) {
+							downMix = true;
+						} else if (wavHeader.channels == 1) {
+						} else {
+							errorf("Sample must be mono or stereo!");
+							continue;
+						}
+						if (wavHeader.bitsPerSample != 16){
+							errorf("Sample must be 16-bit!");
+							continue;
+						}
+						validated = true;
+					}
+					if (chunk.fourCC == "smpl") {
+						auto smpl = readSampleChunk(chunk.data);
+						foreach (loop; smpl.loops) {
+							if (loop.type != 0) {
+								warningf("Ignoring unsupported loop type %s", loop.type);
+								continue;
+							}
+							newLoop = loop.end - loop.start;
+							loopEnd = loop.end;
+						}
+					}
+					if (chunk.fourCC == "data") {
+						newSample = cast(short[])chunk.data;
+						if (downMix) {
+							const old = newSample;
+							newSample = newSample[0 .. $ / 2];
+							foreach (sampleIndex, chanSamples; old.chunks(2).enumerate) {
+								newSample[sampleIndex] = cast(short)((chanSamples[0] + chanSamples[1]) / 2);
+							}
+						}
 					}
 				}
-
-				auto newSample = readWav(matched.front.name, header);
-				if (header.channels == 2) {
-					const old = newSample;
-					newSample = newSample[0 .. $ / 2];
-					foreach (sampleIndex, chanSamples; old.chunks(2).enumerate) {
-						newSample[sampleIndex] = cast(short)((chanSamples[0] + chanSamples[1]) / 2);
-					}
-				} else if (header.channels == 1) {
-				} else {
-					assert(0, "Sample must be mono or stereo!");
+				if (!validated) {
+					infof("Skipping invalid sample %s", matched.front.name);
+					continue;
 				}
-				assert(header.bitsPerSample == 16, "Sample must be 16-bit!");
+				if ((newLoop != 0) && (loopEnd != newSample.length)) {
+					warningf("Loop end (%s) != sample count (%s), unexpected results may occur!", loopEnd, newSample.length);
+				}
 				infof("Replacing sample with %s", matched.front.name);
 				song.replaceSample(idx, newSample, newLoop);
 			}
@@ -184,10 +217,22 @@ int main(string[] args) {
 			mkdirRecurse(outfile);
 		}
 		foreach(idx, sample; song.getSamples) {
-			const filename = buildPath(outfile, format!"%s.%s.brr.wav"(sample.hash.toHexString, sample.loopLength));
+			const filename = buildPath(outfile, format!"%s.brr.wav"(sample.hash.toHexString));
 			if (!filename.exists) {
-				dumpWav(sample.data, sampleRate, 1, filename);
-				writeln("Writing ", filename);
+				SampleChunk smpl;
+				if (sample.loopLength > 0) {
+					SampleLoop loop;
+					loop.id = 0;
+					loop.type = 0;
+					loop.start = cast(uint)(sample.data.length - sample.loopLength);
+					loop.end = cast(uint)sample.data.length;
+					loop.fraction = 0;
+					loop.count = 0; // infinite
+					smpl.loops ~= loop;
+				}
+
+				nspcplay.util.wav.dumpWav(sample.data, sampleRate, 1, filename, smpl);
+				infof("Writing %s samples to %s", sample.data.length, filename);
 			}
 		}
 	} else {
@@ -245,30 +290,6 @@ int main(string[] args) {
 	return 0;
 }
 
-struct WAVFile {
-	align(1):
-	char[4] riffSignature = "RIFF";
-	uint fileSize;
-	char[4] wavSignature = "WAVE";
-	char[4] fmtChunkSignature = "fmt ";
-	uint fmtLength = 16;
-	ushort format = 1;
-	ushort channels;
-	uint sampleRate;
-	uint secondSize;
-	ushort sampleSize;
-	ushort bitsPerSample;
-	char[4] dataSignature = "data";
-	uint dataSize;
-	void recalcSizes(size_t sampleCount) @safe pure {
-		assert(sampleCount <= uint.max, "Too many samples");
-		sampleSize = cast(ushort)(channels * bitsPerSample / 8);
-		secondSize = sampleRate * sampleSize;
-		dataSize = cast(uint)(sampleCount * sampleSize);
-		fileSize = cast(uint)(WAVFile.sizeof - 8 + dataSize);
-	}
-}
-
 void dumpWav(ref NSPCPlayer player, uint sampleRate, ushort channels, string filename) {
 	player.looping = false;
 	short[2][] samples;
@@ -276,23 +297,6 @@ void dumpWav(ref NSPCPlayer player, uint sampleRate, ushort channels, string fil
 		short[2][4096] buffer;
 		samples ~= player.fillBuffer(buffer[]);
 	}
-	dumpWav(samples, sampleRate, channels, filename);
-}
-
-void dumpWav(T)(T[] samples, uint sampleRate, ushort channels, string filename) {
-	auto file = File(filename, "w");
-	WAVFile header;
-	header.sampleRate = sampleRate;
-	header.channels = channels;
-	header.bitsPerSample = 16;
-	header.recalcSizes(samples.length);
-	file.rawWrite([header]);
-	file.rawWrite(samples);
-}
-
-short[] readWav(const string filename, out WAVFile header) {
-	auto file = cast(const(ubyte)[])read(filename);
-	header = (cast(const(WAVFile)[])(file[0 .. WAVFile.sizeof]))[0];
-	assert((header.riffSignature == "RIFF") && (header.wavSignature == "WAVE"), "Invalid WAV file!");
-	return cast(short[])(file[WAVFile.sizeof .. WAVFile.sizeof + header.dataSize]);
+	SampleChunk smpl;
+	nspcplay.util.wav.dumpWav(samples, sampleRate, channels, filename, smpl);
 }
