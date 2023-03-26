@@ -55,6 +55,8 @@ int main(string[] args) {
 		extractEarthbound(rom.data, false, 0x4FBD4, 0x4F997, args[2]);
 	} else if (rom.title == "SUPER MARIOWORLD     ") {
 		extractSMW(rom.data, args[2]);
+	} else if (rom.title == "PILOTWINGS           ") {
+		extractPilotWings(rom.data, args[2]);
 	} else if (rom.title == "THE LEGEND OF ZELDA  ") {
 		extractZ3(rom.data, args[2]);
 	} else if (rom.title == "Super Metroid        ") {
@@ -240,6 +242,39 @@ void extractSMW(const scope ubyte[] data, string outDir) {
 				lowest = min(songAddr, lowest);
 			}
 		}
+	}
+}
+void extractPilotWings(const scope ubyte[] data, string outDir) {
+	static immutable metadata = import("pilotwings.json").fromString!(SongMetadata, JSON, DeSiryulize.optionalByDefault);
+	enum firCoefficientTableOffset = 0x1636;
+	enum songTableOffset = 0x1680;
+	const progOffset = 0x60000;
+	const samplesOffset = 0x28000;
+	enum songs = 21;
+	const packs = parsePacks(data[progOffset .. $]);
+	const samplePacks = parsePacks(data[samplesOffset .. $]);
+	infof("Parsed: %s packs", packs.length);
+	infof("Parsed: %s packs", samplePacks.length);
+	infof("%(%04X%)", samplePacks.map!(x => x.address));
+	const ubyte[8][] firCoefficients = cast(const(ubyte[8])[])(packs[0].data[firCoefficientTableOffset - packs[0].address .. firCoefficientTableOffset - packs[0].address + 8 * 2]);
+	foreach (song; 0 .. songs) {
+		ushort addr = (cast(const(ushort)[])(packs[2].data[songTableOffset - packs[2].address .. songTableOffset - packs[2].address + songs * 2]))[song];
+		const filename = format!"%02X.nspc"(song);
+		auto file = File(buildPath(outDir, filename), "w").lockingBinaryWriter;
+		NSPCWriter writer;
+		writer.header.songBase = addr;
+		writer.header.sampleBase = 0x8000;
+		writer.header.instrumentBase = 0x16AA;
+		writer.header.variant = nspcplay.Variant.prototype;
+		writer.header.extra.percussionBase = 0x16E6;
+		writer.header.volumeTable = VolumeTable.nintendo;
+		writer.header.releaseTable = ReleaseTable.nintendo;
+		writer.header.firCoefficientTableCount = 2;
+		writer.packs ~= packs;
+		writer.packs ~= samplePacks;
+		writer.firCoefficients = firCoefficients;
+		writer.tags = metadata.tags(song);
+		writer.toBytes(file);
 	}
 }
 
