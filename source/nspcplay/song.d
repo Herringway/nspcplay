@@ -599,7 +599,7 @@ const(Pack)[] parsePacks(const(ubyte)[] input) {
 	while (offset < input.length) {
 		Pack pack;
 		auto size = (cast(ushort[])(input[offset .. offset + 2]))[0];
-		if (size == 0) {
+		if ((size == 0) || (size == 0xFFFF)) {
 			break;
 		}
 		auto spcOffset = (cast(ushort[])(input[offset + 2 .. offset + 4]))[0];

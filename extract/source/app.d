@@ -59,6 +59,8 @@ int main(string[] args) {
 		extractPilotWings(rom.data, args[2]);
 	} else if (rom.title == "THE LEGEND OF ZELDA  ") {
 		extractZ3(rom.data, args[2]);
+	} else if (rom.title == "SUPER MARIO ALL_STARS") {
+		extractSMAS(rom.data, args[2]);
 	} else if (rom.title == "Super Metroid        ") {
 		extractSMET(rom.data, args[2]);
 	} else {
@@ -255,7 +257,6 @@ void extractPilotWings(const scope ubyte[] data, string outDir) {
 	const samplePacks = parsePacks(data[samplesOffset .. $]);
 	infof("Parsed: %s packs", packs.length);
 	infof("Parsed: %s packs", samplePacks.length);
-	infof("%(%04X%)", samplePacks.map!(x => x.address));
 	const ubyte[8][] firCoefficients = cast(const(ubyte[8])[])(packs[0].data[firCoefficientTableOffset - packs[0].address .. firCoefficientTableOffset - packs[0].address + 8 * 2]);
 	foreach (song; 0 .. songs) {
 		ushort addr = (cast(const(ushort)[])(packs[2].data[songTableOffset - packs[2].address .. songTableOffset - packs[2].address + songs * 2]))[song];
@@ -311,6 +312,45 @@ void extractZ3(const scope ubyte[] data, string outDir) {
 			writer.toBytes(file);
 		}
 		songID++;
+	}
+}
+void extractSMAS(const scope ubyte[] data, string outDir) {
+	static immutable metadata = import("smas.json").fromString!(SongMetadata, JSON, DeSiryulize.optionalByDefault);
+	enum baseOffset = 0x3FC00;
+	enum smb1SongOffset = 0xF8000;
+	enum smb2SongOffset = 0xFC000;
+	enum smb3SongOffset = 0x60000;
+	enum sampleOffset = 0x58000;
+	enum baseSongOffset = 0x1D9DCF; // is this really where this starts...? are there other packs before this?
+	enum songTableOffset = 0xC000;
+	const parsedBase = parsePacks(data[baseOffset .. $]);
+	const parsedBaseSong = parsePacks(data[baseSongOffset .. $]);
+
+	const parsedSMB1 = parsePacks(data[smb1SongOffset .. $]);
+	const parsedSMB2 = parsePacks(data[smb2SongOffset .. $]);
+	const parsedSMB3 = parsePacks(data[smb3SongOffset .. $]);
+	const parsedSamples = parsePacks(data[sampleOffset .. $]);
+	const extraSongData = [[], parsedSMB1, parsedSMB2, parsedSMB3];
+	enum songCounts = [2, 21, 19, 24];
+	foreach (idx, extra; extraSongData) {
+		const songTable = cast(ushort[])(((idx == 0) ? parsedBaseSong[0] : extra[0]).data[0 .. songCounts[idx] * 2]);
+		foreach (song; 0 .. songCounts[idx]) {
+			const filename = format!"%s - %02X.nspc"(idx, song);
+			auto file = File(buildPath(outDir, filename), "w").lockingBinaryWriter;
+			NSPCWriter writer;
+			writer.header.songBase = cast(ushort)songTable[song];
+			writer.header.sampleBase = 0x3C00;
+			writer.header.instrumentBase = 0x3D00;
+			writer.header.variant = nspcplay.Variant.standard;
+			writer.header.volumeTable = VolumeTable.nintendo;
+			writer.header.releaseTable = ReleaseTable.nintendo;
+			writer.packs = parsedBase;
+			writer.packs ~= parsedBaseSong;
+			writer.packs ~= parsedSamples;
+			writer.packs ~= extra;
+			writer.tags = metadata.tags(song);
+			writer.toBytes(file);
+		}
 	}
 }
 
