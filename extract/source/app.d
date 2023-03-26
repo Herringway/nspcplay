@@ -8,7 +8,7 @@ struct SongMetadata {
 	string album;
 	TrackMetadata[] tracks;
 	TagPair[] tags(size_t songID) const {
-		with (tracks[songID]) {
+		with (songID < tracks.length ? tracks[songID] : TrackMetadata.init) {
 			return [
 				TagPair("album", album),
 				TagPair("title", title),
