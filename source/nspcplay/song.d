@@ -543,6 +543,10 @@ private void decodeSamples(ref Song song, scope const ubyte[] buffer, const scop
 		}
 		try {
 			sample = decodeSample(buffer, start, loop);
+			debug(nspclogging) {
+				import std.digest : toHexString;
+				tracef("Sample %s: %s (Loop: %s)", idx, sample.hash.toHexString, sample.loopLength);
+			}
 		} catch (Exception e) {
 			debug tracef("Couldn't load sample %d: %s", idx, e.msg);
 		}
