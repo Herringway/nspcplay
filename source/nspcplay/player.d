@@ -28,6 +28,7 @@ private struct SongState {
 	ubyte repeatCount;
 	int phraseCounter = -1;
 
+	bool echoEnabled;
 	Slider echoVolumeLeft;
 	Slider echoVolumeRight;
 	ushort echoBufferSize = 1;
@@ -315,11 +316,9 @@ short[2] mixEcho(ref SongState state) nothrow pure @trusted {
 	result[left] &= ~1;
 	result[right] &= ~1;
 
-	foreach (idx, channel; state.channels) {
-		if (channel.echoEnabled) {
-			state.echoBuffer[state.echoBufferIndex][left] = result[left];
-			state.echoBuffer[state.echoBufferIndex][right] = result[right];
-		}
+	if (state.echoEnabled) {
+		state.echoBuffer[state.echoBufferIndex][left] = result[left];
+		state.echoBuffer[state.echoBufferIndex][right] = result[right];
 	}
 
 	if (++state.echoBufferIndex >= state.echoBufferSize) {
@@ -337,6 +336,7 @@ short[2] mixEcho(ref SongState state) nothrow pure @trusted {
 	state.echoBufferIndex = 0;
 	state.echoBuffer[] = [-1, -1];
 	short[2] mix(short[2] chan2, short[2] chan3, short[2] chan4) {
+		state.echoEnabled = true;
 		state.channels[0].echoEnabled = false;
 		state.channels[0].echoSamples = [0, 0];
 		state.channels[1].echoEnabled = false;
@@ -434,11 +434,13 @@ struct NSPCPlayer {
 				}
 				s1 = (s1 * channel.gain) >> 11;
 
-				tempSample[left] += cast(int)(s1 * channel.leftVolume / 128.0);
-				tempSample[right] += cast(int)(s1 * channel.rightVolume / 128.0);
+				const leftSample = cast(short)(s1 * channel.leftVolume / 128.0);
+				const rightSample = cast(short)(s1 * channel.rightVolume / 128.0);
+				tempSample[left] += leftSample;
+				tempSample[right] += rightSample;
 				if (channel.echoEnabled) {
-					channel.echoSamples[0] = cast(short)sample[left];
-					channel.echoSamples[1] = cast(short)sample[right];
+					channel.echoSamples[0] = leftSample;
+					channel.echoSamples[1] = rightSample;
 				}
 
 				channel.samplePosition += channel.noteFrequency;
@@ -452,8 +454,8 @@ struct NSPCPlayer {
 				}
 			}
 			const echo = mixEcho(state);
-			sample[left] = cast(short)(clamp(cast(int)((tempSample[left] * state.masterVolumeLeft + echo[left] * cast(byte)state.echoVolumeLeft.current) / 128.0), short.min, short.max) ^ 0xFFFF);
-			sample[right] = cast(short)(clamp(cast(int)((tempSample[right] * state.masterVolumeRight + echo[right] * cast(byte)state.echoVolumeRight.current) / 128.0), short.min, short.max) ^ 0xFFFF);
+			sample[left] = cast(short)clamp(cast(int)((tempSample[left] * state.masterVolumeLeft + echo[left] * cast(byte)state.echoVolumeLeft.current) / 128.0), short.min, short.max);
+			sample[right] = cast(short)clamp(cast(int)((tempSample[right] * state.masterVolumeRight + echo[right] * cast(byte)state.echoVolumeRight.current) / 128.0), short.min, short.max);
 		}
 		return buffer[0 .. length];
 	}
@@ -638,11 +640,12 @@ struct NSPCPlayer {
 				}
 				st.echoVolumeLeft.current = command.parameters[1];
 				st.echoVolumeRight.current = command.parameters[2];
+				st.echoEnabled = true;
 				break;
 			case VCMD.echoOff:
-				foreach (ref channel; st.channels) {
-					channel.echoEnabled = false;
-				}
+				st.echoVolumeLeft.current = 0;
+				st.echoVolumeRight.current = 0;
+				st.echoEnabled = false;
 				break;
 			case VCMD.echoParameterSetup:
 				st.echoBufferIndex = 0;
