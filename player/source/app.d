@@ -113,7 +113,10 @@ int main(string[] args) {
 	if (song.tags) {
 		info("Tags:");
 		foreach (pair; song.tags) {
-			infof("%s: %s", pair.key, pair.value.string);
+			if (pair.key.startsWith("_")) {
+				continue;
+			}
+			infof("%s: %s", pair.key, pair.str);
 		}
 	}
 	if (channelsEnabled.length != 8) {

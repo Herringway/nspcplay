@@ -62,12 +62,29 @@ union TagData {
 
 struct TagPair {
 	const(char)[] key;
-	bool binary;
-	TagData value;
+	private bool _binary;
+	private TagData _value;
 	this(string key, string value) @safe pure {
 		this.key = key;
-		this.binary = false;
-		this.value.string = value;
+		this._binary = false;
+		this._value.string = value;
+	}
+	this(string key, const(ubyte)[] value) @safe pure {
+		this.key = key;
+		this._binary = true;
+		this._value.binary = value;
+	}
+	const(char)[] str() @trusted pure {
+		if (_binary) {
+			return "";
+		}
+		return _value.string;
+	}
+	const(ubyte)[] binary() @trusted pure {
+		if (!_binary) {
+			return [];
+		}
+		return _value.binary;
 	}
 }
 
@@ -82,8 +99,8 @@ TagPair[] readTags(const scope ubyte[] data) @safe {
 			const tagData = buffer[TagHeader.key.offsetof .. $];
 			const keyEnd = tagData.countUntil(0) + 1;
 			pair.key = cast(const(char)[])tagData[0 .. keyEnd - 1].dup;
-			pair.binary = header.flags.encoding == Encoding.binary;
-			pair.value.binary = tagData[keyEnd .. keyEnd + header.size].dup;
+			pair._binary = header.flags.encoding == Encoding.binary;
+			pair._value.binary = tagData[keyEnd .. keyEnd + header.size].dup;
 			buffer = buffer[TagHeader.sizeof + keyEnd + header.size .. $];
 			result ~= pair;
 		}
@@ -112,12 +129,12 @@ const(ubyte)[] tagsToBytes(scope const(TagPair)[] tags) @safe pure {
 	static const(ubyte)[] tagToBytes(TagPair tag) {
 		const(ubyte)[] result;
 		TagHeader[1] header;
-		assert(tag.value.length < uint.max);
-		header[0].size = cast(uint)tag.value.length;
+		assert(tag._value.length < uint.max);
+		header[0].size = cast(uint)tag._value.length;
 		result ~= cast(const(ubyte)[])header[];
 		result ~= tag.key;
 		result ~= 0;
-		result ~= tag.value.binary;
+		result ~= tag._value.binary;
 		return result;
 	}
 	footer[0].tagSize = APETagHeaderFooter.sizeof;

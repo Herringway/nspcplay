@@ -374,6 +374,7 @@ void extractFZ(const scope ubyte[] data, string outDir) {
 		writer.header.releaseTable = ReleaseTable.nintendo;
 		writer.packs = parsedBase;
 		writer.tags = metadata.tags(song);
+		writer.tags ~= TagPair("_masterVolume", "84");
 		writer.toBytes(file);
 	}
 }

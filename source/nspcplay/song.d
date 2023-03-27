@@ -3,6 +3,7 @@ module nspcplay.song;
 import std.algorithm.comparison : among, max, min;
 import std.algorithm.sorting : sort;
 import std.algorithm.searching : canFind;
+import std.conv : to;
 import std.exception : enforce;
 import std.experimental.logger;
 import std.format : format;
@@ -95,6 +96,7 @@ struct Song {
 	Sample[128] samples;
 	ubyte[256] percussionNotes;
 	size_t percussionBase;
+	byte masterVolume = 0x70;
 	TagPair[] tags;
 	/// Load a single sequence pack at a given address
 	void loadSequencePack(const(ubyte)[] data, ushort base) @safe {
@@ -229,16 +231,10 @@ struct Song {
 	}
 	// I hope these two never need to be changed
 	package ubyte masterVolumeL() const @safe pure nothrow {
-		return masterVolume();
+		return masterVolume;
 	}
 	package ubyte masterVolumeR() const @safe pure nothrow {
-		return masterVolume();
-	}
-	package ubyte masterVolume() const @safe pure nothrow {
-		if (variant == Variant.fzero) {
-			return 0x54;
-		}
-		return 0x70;
+		return masterVolume;
 	}
 	package bool defaultEnchantedReadahead() const @safe pure nothrow {
 		return !variant.among(Variant.prototype, Variant.addmusick);
@@ -385,6 +381,15 @@ Song loadNSPCFile(const(ubyte)[] data, ushort[] phrases = []) @safe {
 		song.firCoefficients = cast(const(ubyte[8])[])remaining[0 .. 8 * header.firCoefficientTableCount];
 	}
 	song.tags = readTags(remaining[8 * header.firCoefficientTableCount .. $]);
+	foreach (tagPair; song.tags) {
+		switch (tagPair.key) {
+			case "_masterVolume":
+				song.masterVolume = tagPair.str.to!byte;
+				break;
+			default:
+				break;
+		}
+	}
 	song.order = phrases == null ? decompilePhrases(buffer[], header.songBase) : interpretPhrases(phrases, header.songBase);
 	decompileSong(buffer[], song);
 	debug(nspclogging) tracef("FIR coefficients: %s", song.firCoefficients);
