@@ -145,6 +145,7 @@ private immutable ubyte[VCMD.max + 1] codeLength = [
 VCMDClass getCommandClass(Variant variant, ubyte val, out ubyte base) nothrow @safe pure {
 	final switch (variant) {
 		case Variant.standard:
+		case Variant.fzero:
 		case Variant.konami:
 			if (val == 0) {
 				return VCMDClass.terminator;
@@ -264,6 +265,43 @@ VCMD getCommand(Variant variant, ubyte val) nothrow @safe pure {
 				case 0xFC: return VCMD.channelMute;
 				case 0xFD: return VCMD.fastForwardOn;
 				case 0xFE: return VCMD.fastForwardOff;
+				case 0xFF: return VCMD.invalid;
+				default: break;
+			}
+			break;
+		case Variant.fzero:
+			switch (val) {
+				case 0xE0: return VCMD.instrument;
+				case 0xE1: return VCMD.panning;
+				case 0xE2: return VCMD.panningFade;
+				case 0xE3: return VCMD.vibratoOn;
+				case 0xE4: return VCMD.vibratoOff;
+				case 0xE5: return VCMD.songVolume;
+				case 0xE6: return VCMD.songVolumeFade;
+				case 0xE7: return VCMD.tempo;
+				case 0xE8: return VCMD.tempoFade;
+				case 0xE9: return VCMD.globalAbsoluteTransposition;
+				case 0xEA: return VCMD.channelAbsoluteTransposition;
+				case 0xEB: return VCMD.tremoloOn;
+				case 0xEC: return VCMD.tremoloOff;
+				case 0xED: return VCMD.volume;
+				case 0xEE: return VCMD.volumeFade;
+				case 0xEF: return VCMD.subRoutine;
+				case 0xF0: return VCMD.vibratoFadeIn;
+				case 0xF1: return VCMD.notePitchEnvelopeTo;
+				case 0xF2: return VCMD.notePitchEnvelopeFrom;
+				case 0xF3: return VCMD.notePitchEnvelopeOff;
+				case 0xF4: return VCMD.fineTune;
+				case 0xF5: return VCMD.echoEnableBitsAndVolume;
+				case 0xF6: return VCMD.echoOff;
+				case 0xF7: return VCMD.echoParameterSetup;
+				case 0xF8: return VCMD.echoVolumeFade;
+				case 0xF9: return VCMD.pitchSlideToNote;
+				case 0xFA: return VCMD.percussionBaseInstrumentRedefine;
+				case 0xFB: return VCMD.invalid;
+				case 0xFC: return VCMD.invalid;
+				case 0xFD: return VCMD.invalid;
+				case 0xFE: return VCMD.invalid;
 				case 0xFF: return VCMD.invalid;
 				default: break;
 			}

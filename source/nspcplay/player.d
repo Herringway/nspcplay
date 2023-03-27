@@ -413,7 +413,9 @@ struct NSPCPlayer {
 					}
 				}
 			}
-			doEcho(state, sample[0], sample[1], mixrate);
+			sample[left] = cast(short)(sample[left] * currentSong.masterVolumeL / 128.0);
+			sample[right] = cast(short)(sample[right] * currentSong.masterVolumeR / 128.0);
+			doEcho(state, sample[0] , sample[1] , mixrate);
 		}
 		return buffer[0 .. length];
 	}

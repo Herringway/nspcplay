@@ -57,6 +57,8 @@ int main(string[] args) {
 		extractSMW(rom.data, args[2]);
 	} else if (rom.title == "PILOTWINGS           ") {
 		extractPilotWings(rom.data, args[2]);
+	} else if (rom.title == "F-ZERO               ") {
+		extractFZ(rom.data, args[2]);
 	} else if (rom.title == "THE LEGEND OF ZELDA  ") {
 		extractZ3(rom.data, args[2]);
 	} else if (rom.title == "SUPER MARIO ALL_STARS") {
@@ -351,6 +353,28 @@ void extractSMAS(const scope ubyte[] data, string outDir) {
 			writer.tags = metadata.tags(song);
 			writer.toBytes(file);
 		}
+	}
+}
+void extractFZ(const scope ubyte[] data, string outDir) {
+	static immutable metadata = import("fzero.json").fromString!(SongMetadata, JSON, DeSiryulize.optionalByDefault);
+	enum baseOffset = 0x8000;
+	enum songTableOffset = 0x1FD8;
+	const parsedBase = parsePacks(data[baseOffset .. $]);
+	enum songCount = 17;
+	const songTable = cast(ushort[])(parsedBase[4].data[songTableOffset - parsedBase[4].address .. songTableOffset - parsedBase[4].address + songCount * 2]);
+	foreach (song; 0 .. songCount) {
+		const filename = format!"%02X.nspc"(song);
+		auto file = File(buildPath(outDir, filename), "w").lockingBinaryWriter;
+		NSPCWriter writer;
+		writer.header.songBase = cast(ushort)songTable[song];
+		writer.header.sampleBase = 0x3C00;
+		writer.header.instrumentBase = 0x518;
+		writer.header.variant = nspcplay.Variant.fzero;
+		writer.header.volumeTable = VolumeTable.nintendo;
+		writer.header.releaseTable = ReleaseTable.nintendo;
+		writer.packs = parsedBase;
+		writer.tags = metadata.tags(song);
+		writer.toBytes(file);
 	}
 }
 

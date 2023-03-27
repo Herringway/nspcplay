@@ -1,0 +1,22 @@
+{
+	"album": "F-Zero",
+	"tracks": [
+		{ "artist": "Yumiko Kanki", "title": "Start" },
+		{ "artist": "Yumiko Kanki", "title": "Zoom" },
+		{ "artist": "Yumiko Kanki", "title": "Lost Life" },
+		{ "artist": "Yumiko Kanki", "title": "Opening Theme" },
+		{ "artist": "Yumiko Kanki", "title": "Select Time Theme" },
+		{ "artist": "", "title": "" },
+		{ "artist": "Naoto Ishida", "title": "Ending Theme" },
+		{ "artist": "Yumiko Kanki", "title": "Mute City" },
+		{ "artist": "Naoto Ishida", "title": "Big Blue" },
+		{ "artist": "Yumiko Kanki", "title": "Sand Ocean" },
+		{ "artist": "Yumiko Kanki", "title": "Silence" },
+		{ "artist": "Yumiko Kanki", "title": "Port Town" },
+		{ "artist": "Yumiko Kanki", "title": "Red Canyon" },
+		{ "artist": "Yumiko Kanki", "title": "White Land I" },
+		{ "artist": "Yumiko Kanki", "title": "White Land II" },
+		{ "artist": "Yumiko Kanki", "title": "Fire Field" },
+		{ "artist": "Yumiko Kanki", "title": "Death Wind" },
+	]
+}

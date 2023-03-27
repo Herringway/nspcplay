@@ -227,6 +227,19 @@ struct Song {
 		}
 		return 0x20;
 	}
+	// I hope these two never need to be changed
+	package ubyte masterVolumeL() const @safe pure nothrow {
+		return masterVolume();
+	}
+	package ubyte masterVolumeR() const @safe pure nothrow {
+		return masterVolume();
+	}
+	package ubyte masterVolume() const @safe pure nothrow {
+		if (variant == Variant.fzero) {
+			return 0x54;
+		}
+		return 0x70;
+	}
 	package bool defaultEnchantedReadahead() const @safe pure nothrow {
 		return !variant.among(Variant.prototype, Variant.addmusick);
 	}

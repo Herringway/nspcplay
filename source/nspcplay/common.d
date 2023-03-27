@@ -5,6 +5,7 @@ enum Variant : uint {
 	prototype = 1, // Early SNES games from Nintendo
 	konami = 2, // Konami's NSPC variant - NYI
 	addmusick = 3, /// AddMusicK, a community-maintained extension to the prototype NSPC engine
+	fzero = 4, /// An almost-final version of standard N-SPC. Several commands are missing, master volume is 25% lower
 }
 
 enum Interpolation {
