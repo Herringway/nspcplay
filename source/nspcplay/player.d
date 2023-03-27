@@ -366,6 +366,7 @@ struct NSPCPlayer {
 				}
 			}
 			length++;
+			int[2] tempSample;
 			foreach (i, ref channel; state.channels) {
 				const loadedSample = currentSong.samples[channel.sampleID];
 				if (!channel.enabled) {
@@ -401,8 +402,8 @@ struct NSPCPlayer {
 				}
 				s1 = (s1 * channel.gain) >> 11;
 
-				sample[left] += cast(int)(s1 * channel.leftVolume / 128.0);
-				sample[right] += cast(int)(s1 * channel.rightVolume / 128.0);
+				tempSample[left] += cast(int)(s1 * channel.leftVolume / 128.0);
+				tempSample[right] += cast(int)(s1 * channel.rightVolume / 128.0);
 
 				channel.samplePosition += channel.noteFrequency;
 				if ((channel.samplePosition >> 15) >= loadedSample.data.length) {
@@ -414,8 +415,8 @@ struct NSPCPlayer {
 					}
 				}
 			}
-			sample[left] = cast(short)(sample[left] * currentSong.masterVolumeL / 128.0);
-			sample[right] = cast(short)(sample[right] * currentSong.masterVolumeR / 128.0);
+			sample[left] = cast(short)(clamp(tempSample[left] * currentSong.masterVolumeL / 128.0, short.min, short.max));
+			sample[right] = cast(short)(clamp(tempSample[right] * currentSong.masterVolumeR / 128.0, short.min, short.max));
 			doEcho(state, sample[0] , sample[1] , mixrate);
 		}
 		return buffer[0 .. length];
