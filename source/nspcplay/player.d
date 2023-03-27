@@ -347,6 +347,7 @@ struct NSPCPlayer {
 
 	size_t onTimerTicksLeft;
 	void function(scope NSPCPlayer*) @safe pure nothrow onTimerTick;
+	void function(scope NSPCPlayer*) @safe pure nothrow onPhraseChange;
 	///
 	short[2][] fillBuffer(short[2][] buffer) nothrow pure @safe {
 		enum left = 0;
@@ -829,6 +830,9 @@ struct NSPCPlayer {
 					setChannel(idx, assumeWontThrow(currentSong.tracks.get(trackList[idx], [])));
 				}
 				break;
+		}
+		if (onPhraseChange !is null) {
+			onPhraseChange(&this);
 		}
 	}
 	public void setChannel(size_t index, const(Command)[] commands) nothrow pure @safe {
