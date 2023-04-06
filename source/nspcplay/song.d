@@ -86,7 +86,7 @@ struct Song {
 	ushort address;
 	const(Phrase)[] order;
 	ushort[8][ushort] trackLists;
-	const(Command)[][ushort] tracks;
+	Track[ushort] tracks;
 	const(ubyte[8])[] firCoefficients;
 	ubyte[8] releaseTable;
 	/// Alternative release table to use when switch command is used (AMK)
@@ -188,8 +188,8 @@ struct Song {
 			}
 		}
 	}
-	private void validateTrack(scope const Command[] track, bool isSub, ref ubyte tmpPercussionBase) @safe {
-		const(Command)[] data = track;
+	void validateTrack(scope const Track track, bool isSub, ref ubyte tmpPercussionBase) @safe {
+		const(Command)[] data = track.data;
 		bool endReached;
 		while (data.length > 0) {
 			const command = data[0];
@@ -272,15 +272,15 @@ struct Song {
 	void toString(S)(ref S sink) const {
 		import std.format : formattedWrite;
 		import std.range : put;
-		void printSequence(const(Command)[] data) {
+		void printSequence(Track track) {
 			bool done;
-			while((data.length > 0) && (!done)) {
-				const command = data[0];
+			while((track.data.length > 0) && (!done)) {
+				const command = track.data[0];
 				sink.formattedWrite!"%x\n"(command);
 				if (command.type == VCMDClass.terminator) {
 					done = true;
 				}
-				data = data[1 .. $];
+				track.data = track.data[1 .. $];
 			}
 		}
 		sink.formattedWrite!"Phrases: %s\n"(order);
@@ -289,7 +289,7 @@ struct Song {
 			foreach (trackID, track; trackList) {
 				put(sink, "----------\n");
 				sink.formattedWrite!"Track %s ($%04X)\n"(trackID, track);
-				printSequence(tracks.get(track, []));
+				printSequence(tracks.get(track, Track.init));
 			}
 		}
 		outer: foreach (subroutineID, subroutine; tracks) {
@@ -503,15 +503,15 @@ private void decompileSong(scope const(ubyte)[] data, ref Song song) @safe {
 		}
 	}
 }
-private const(Command)[] decompileTrack(immutable(ubyte)[] data, ushort start, ref Song song, ref ubyte tmpPercussionBase, bool recurse) @safe {
-	const(Command)[] track;
+private Track decompileTrack(immutable(ubyte)[] data, ushort start, ref Song song, ref ubyte tmpPercussionBase, bool recurse) @safe {
+	Track track;
 	// Determine the end of the track.
 	const(ubyte)[] trackEnd = data[start .. $];
 	size_t totalLength;
 	while (true) {
 		size_t length;
 		const command = readCommand(song.variant, trackEnd, length);
-		track ~= command;
+		track.data ~= command;
 		trackEnd = trackEnd[length .. $];
 		totalLength += length;
 		if (command.type == VCMDClass.terminator) {
