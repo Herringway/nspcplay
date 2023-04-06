@@ -131,6 +131,7 @@ int main(string[] args) {
 		infof("Detected instruments: %04X", header.instrumentBase);
 		infof("Detected samples: %04X", header.sampleBase);
 		infof("Detected song: %04X", header.songBase);
+		infof("Detected release table: %s, volume table: %s", header.releaseTable, header.volumeTable);
 		song.loadNSPC(header, spc[]);
 	} else {
 		song = loadNSPCFile(file, phrases);
