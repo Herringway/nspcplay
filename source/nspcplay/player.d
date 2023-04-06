@@ -337,7 +337,7 @@ struct NSPCPlayer {
 	package const(Song)* currentSong;
 	private SongState state;
 	private SongState backupState;
-	private int mixrate = nativeSamplingRate;
+	private int _mixrate = nativeSamplingRate;
 	private int timerSpeed = defaultSpeed;
 	private bool songPlaying;
 
@@ -1125,6 +1125,9 @@ struct NSPCPlayer {
 	}
 	bool isPlaying() const pure @safe nothrow {
 		return songPlaying;
+	}
+	public ref inout(int) mixrate() inout nothrow pure @safe return {
+		return _mixrate;
 	}
 	public void fade(ubyte ticks, ubyte targetVolume) @safe nothrow pure {
 		backupState.volume = state.volume;
