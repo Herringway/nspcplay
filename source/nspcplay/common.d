@@ -17,17 +17,21 @@ enum Interpolation {
 }
 
 enum ReleaseTable : ubyte {
-	nintendo,
+	nintendo1,
 	hal1,
 	hal2,
 	hal3,
+	nintendo2,
+	nintendoProto,
 }
 
 enum VolumeTable : ubyte {
-	nintendo,
+	nintendo1,
 	hal1,
 	hal2,
 	hal3,
+	nintendo2,
+	nintendoProto,
 }
 
 enum GainMode {
