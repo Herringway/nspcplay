@@ -87,7 +87,7 @@ struct Song {
 	const(Phrase)[] order;
 	ushort[8][ushort] trackLists;
 	Track[ushort] tracks;
-	const(ubyte[8])[] firCoefficients;
+	const(ubyte[8])[] firCoefficients = defaultFIRCoefficients;
 	ubyte[8] releaseTable;
 	/// Alternative release table to use when switch command is used (AMK)
 	ubyte[8] altReleaseTable;
