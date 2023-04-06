@@ -390,7 +390,7 @@ struct Command {
 	VCMDClass type;
 	VCMD special;
 	const(ubyte)[] parameters;
-	private const(ubyte)[] raw;
+	const(ubyte)[] raw;
 	/// returns byte 0, minus the beginning of whatever class of command
 	ubyte relative() const @safe pure nothrow scope {
 		return cast(ubyte)(_cmd - _cmdBase);

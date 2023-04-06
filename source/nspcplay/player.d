@@ -1181,6 +1181,9 @@ struct NSPCPlayer {
 		onTimerTicksLeft = ticks;
 		onTimerTick = func;
 	}
+	auto phraseCounter() const @safe pure nothrow {
+		return state.phraseCounter;
+	}
 }
 
 private bool inRange(T)(T val, T lower, T upper) {
