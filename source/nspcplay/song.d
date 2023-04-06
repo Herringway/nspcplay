@@ -82,6 +82,10 @@ struct Phrase {
 	}
 }
 
+struct Track {
+	const(Command)[] data;
+}
+
 struct Song {
 	ushort address;
 	const(Phrase)[] order;
