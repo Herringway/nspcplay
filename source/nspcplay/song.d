@@ -320,6 +320,9 @@ struct Song {
 	void replaceSample(size_t index, short[] data) @safe pure nothrow {
 		replaceSample(index, data, samples[index].loopLength);
 	}
+	bool isValid() const @safe pure nothrow {
+		return trackLists.length != 0;
+	}
 }
 private struct PrototypeInstrument {
 	align(1):
