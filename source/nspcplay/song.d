@@ -699,7 +699,7 @@ NSPCFileHeader detectParameters(scope const(ubyte)[] data, const(ubyte)[] dsp) @
 			songTableOffset = data[i + 12] + (data[i + 13] << 8);
 		}
 		// prototype song table
-		if ((data[i .. i + 3] == [0x1C, 0xFD, 0xF6]) && (data[i + 5] == 0xC4) && (data[i + 7] == 0xF6) && (data[i + 10] == 0xC4)) {
+		if ((data[i .. i + 3] == [0x1C, 0xFD, 0xF6]) && (data[i + 5] == 0xC4) && (data[i + 7] == 0xF6) && (data[i + 10] == 0xC4) && (data[i + 12] == 0xCD)) {
 			trackPointerAddress = data[i + 6];
 			songTableOffset = data[i + 3] + (data[i + 4] << 8);
 		}
@@ -740,11 +740,14 @@ NSPCFileHeader detectParameters(scope const(ubyte)[] data, const(ubyte)[] dsp) @
 			}
 		}
 	}
+	if (data[0x800 .. 0x810] == fzeroStart) {
+		header.variant = Variant.fzero;
+	}
 	if (songTableOffset != 0) {
 		songTable = (cast(const(ushort)[])data[songTableOffset .. min($, songTableOffset + 512)]);
 		debug infof("Found song table at %04X", songTableOffset);
 		ubyte songID = 0;
-		foreach (songIDCandidate; only(data[0x00], data[0x04], data[0x06], data[0x08], data[0x0D], data[0xF3], data[0xF4])) {
+		foreach (songIDCandidate; only(data[0x04], data[0x00], data[0x06], data[0x08], data[0x0D], data[0xF3], data[0xF4])) {
 			if (songIDCandidate == 0) {
 				continue;
 			}
@@ -781,6 +784,7 @@ NSPCFileHeader detectParameters(scope const(ubyte)[] data, const(ubyte)[] dsp) @
 
 	return header;
 }
+enum fzeroStart = [0x20, 0xCD, 0xCF, 0xBD, 0xE8, 0x00, 0x5D, 0xAF, 0xC8, 0xE8, 0xD0, 0xFB, 0xBC, 0x3F, 0x3D, 0x0E]; // start of f-zero's program
 enum amkPreTable = [0x8F, 0x02, 0x0C, 0xAE, 0x1C, 0xFD, 0xF6];
 enum earlyAMK = [0x20, 0xCD, 0xCF, 0xBD, 0xE8, 0x00, 0x8D, 0x00, 0xD6, 0x00, 0x01, 0xFE, 0xFB, 0xD6, 0x00, 0x02]; //pre-1.0.9
 enum laterAMK = [0x20, 0xCD, 0xCF, 0xBD, 0xE8, 0x00, 0xFD, 0xD6, 0x00, 0x01, 0xD6, 0x00, 0x02, 0xD6, 0x00, 0x03]; //1.0.9
