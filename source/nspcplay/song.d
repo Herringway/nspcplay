@@ -776,7 +776,7 @@ NSPCFileHeader detectParameters(scope const(ubyte)[] data, const(ubyte)[] dsp) @
 		}
 	}
 	enforce(header.instrumentBase != 0, "Instrument table not found");
-	if (songTable != null) {
+	if (songTableOffset == 0) {
 		enforce(header.songBase != 0, "Song data and song table not found");
 	} else {
 		enforce(header.songBase != 0, "Song data not found");
