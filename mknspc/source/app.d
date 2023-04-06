@@ -88,28 +88,8 @@ NSPCWriter buildNSPCFromSPC(string[] args, out string filename) {
 	}
 	auto spcFile = cast(ubyte[])read(args[1]);
 	if (autodetect) {
-		const sampleDirectory = spcFile[0x1015D];
-		infof("Using auto-detected sample directory: %04X", sampleDirectory << 8);
-		writer.header.sampleBase = sampleDirectory << 8;
-	}
-	if (autodetect) {
-		if (spcFile.isAMK) {
-			infof("Detected AddMusicK song");
-			writer.header.variant = nspcplay.Variant.addmusick;
-			const songTableAddress = spcFile.find(amkPreTable)[amkPreTable.length .. $];
-			const tableAddr = (cast(const(ushort)[])(songTableAddress[0 .. 2]))[0] + 2 + 0x100 + 18;
-			infof("Detected song table: %04X", tableAddr - 0x100);
-			writer.header.songBase = (cast(const(ushort)[])spcFile[tableAddr .. tableAddr + 2])[0];
-			writer.header.instrumentBase = 0x1844;
-			infof("Detected song address: %04X", writer.header.songBase);
-			const songStartData = spcFile[writer.header.songBase + 0x100 .. $];
-			ushort customInstrumentBase = 0;
-			while(songStartData[customInstrumentBase .. customInstrumentBase + 2] != [0xFF, 0x00]) {
-				customInstrumentBase += 2;
-			}
-			writer.header.extra.customInstruments = cast(ushort)((cast(const(ushort)[])songStartData[customInstrumentBase + 2 .. customInstrumentBase  + 4])[0] + 6);
-			infof("Detected custom instruments: %04X", writer.header.extra.customInstruments);
-		}
+		writer.header = detectParameters(spcFile[0x100 .. 0x10100], spcFile[0x10100 .. 0x10180]);
+		infof("Detected parameters: Variant: %s, Song: %04X, Instruments: %04X, Samples: %04X", writer.header.variant, writer.header.songBase, writer.header.instrumentBase, writer.header.sampleBase);
 	}
 	const id666 = (cast(ID666Tags[])spcFile[0x2E .. 0x100])[0];
 	void addTag(string tag, const char[] value) {

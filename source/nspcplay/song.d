@@ -7,6 +7,7 @@ import std.conv : to;
 import std.exception : enforce;
 import std.experimental.logger;
 import std.format : format;
+import std.range : only;
 
 import nspcplay.common;
 import nspcplay.samples;
@@ -110,26 +111,49 @@ struct Song {
 	private void loadSequence(const(ubyte)[] data, ushort base) @safe {
 		ubyte[65536] buffer;
 		loadAllSubpacks(buffer, data);
+		loadSequenceBuffer(buffer[], base);
+	}
+	void loadSequenceBuffer(scope const(ubyte)[] buffer, ushort base) @safe {
 		order = decompilePhrases(buffer[], base);
 		decompileSong(buffer[], this);
 	}
 	/// Load instruments from provided packs at the given addresses
+	void loadInstruments(scope ubyte[] buffer, ushort instrumentBase, ushort sampleBase) @safe {
+		initializeInstruments(buffer, instrumentBase, sampleBase);
+	}
 	void loadInstruments(const(ubyte)[][] packs, ushort instrumentBase, ushort sampleBase) @safe {
 		ubyte[65536] buffer;
 		foreach (pack; packs) {
 			loadInstrumentPack(buffer, pack);
 		}
-		initializeInstruments(buffer, instrumentBase, sampleBase);
+		loadInstruments(buffer[], instrumentBase, sampleBase);
 	}
 	/// Load instruments from provided packs at the given addresses
 	void loadInstrumentPack(scope ref ubyte[65536] buffer, const(ubyte)[] pack) @safe {
 		loadAllSubpacks(buffer[], pack);
 	}
-	void initializeInstruments(scope const ref ubyte[65536] buffer, ushort instrumentBase, ushort sampleBase) @safe {
+	void initializeInstruments(scope const ubyte[] buffer, ushort instrumentBase, ushort sampleBase) @safe {
 		NSPCFileHeader fakeHeader;
 		fakeHeader.instrumentBase = instrumentBase;
 		fakeHeader.sampleBase = sampleBase;
 		processInstruments(this, buffer, fakeHeader);
+	}
+	void loadNSPC(const NSPCFileHeader header, scope const ubyte[] data, ushort[] phrases = []) @safe {
+		debug(nspclogging) tracef("Loading NSPC - so: %X, i: %X, sa: %X, variant: %s", header.songBase, header.instrumentBase, header.sampleBase, header.variant);
+		variant = header.variant;
+		assert(header.volumeTable < volumeTables.length, "Invalid volume table");
+		assert(header.releaseTable < releaseTables.length, "Invalid release table");
+		volumeTable = volumeTables[header.volumeTable];
+		releaseTable = releaseTables[header.releaseTable];
+		if (variant == Variant.addmusick) {
+			altReleaseTable = releaseTables[0]; // AMK allows the 'default' release table to be used as well
+		}
+		debug(nspclogging) tracef("Release table: %s, volume table: %s", header.releaseTable, header.volumeTable);
+		processInstruments(this, data, header);
+		order = phrases == null ? decompilePhrases(data[], header.songBase) : interpretPhrases(phrases, header.songBase);
+		decompileSong(data[], this);
+		debug(nspclogging) tracef("FIR coefficients: %s", firCoefficients);
+
 	}
 	private void validatePhrases() @safe {
 		import std.algorithm.comparison : among;
@@ -337,7 +361,7 @@ private immutable ubyte[8][] defaultFIRCoefficients = [
 	[0x34, 0x33, 0x00, 0xD9, 0xE5, 0x01, 0xFC, 0xEB],
 ];
 
-const(ubyte)[] loadAllSubpacks(scope ubyte[] buffer, const(ubyte)[] pack) @safe {
+const(ubyte)[] loadAllSubpacks(scope ubyte[] buffer, return scope const(ubyte)[] pack) @safe {
 	ushort size, base;
 	while (true) {
 		if (pack.length == 0) {
@@ -363,22 +387,11 @@ Song loadNSPCFile(const(ubyte)[] data, ushort[] phrases = []) @safe {
 	Song song;
 	ubyte[65536] buffer;
 	auto header = read!NSPCFileHeader(data);
-	debug(nspclogging) tracef("Loading NSPC - so: %X, i: %X, sa: %X, variant: %s", header.songBase, header.instrumentBase, header.sampleBase, header.variant);
-	song.variant = header.variant;
-	assert(header.volumeTable < volumeTables.length, "Invalid volume table");
-	assert(header.releaseTable < releaseTables.length, "Invalid release table");
-	song.volumeTable = volumeTables[header.volumeTable];
-	song.releaseTable = releaseTables[header.releaseTable];
-	if (song.variant == Variant.addmusick) {
-		song.altReleaseTable = releaseTables[0]; // AMK allows the 'default' release table to be used as well
-	}
-	debug(nspclogging) tracef("Release table: %s, volume table: %s", header.releaseTable, header.volumeTable);
 	const remaining = loadAllSubpacks(buffer[], data[NSPCFileHeader.sizeof .. $]);
-	processInstruments(song, buffer, header);
 	if (header.firCoefficientTableCount == 0) {
 		song.firCoefficients = defaultFIRCoefficients;
 	} else {
-		song.firCoefficients = cast(const(ubyte[8])[])remaining[0 .. 8 * header.firCoefficientTableCount];
+		song.firCoefficients = cast(const(ubyte[8])[])remaining[0 .. 8 * header.firCoefficientTableCount].dup;
 	}
 	song.tags = readTags(remaining[8 * header.firCoefficientTableCount .. $]);
 	foreach (tagPair; song.tags) {
@@ -390,15 +403,13 @@ Song loadNSPCFile(const(ubyte)[] data, ushort[] phrases = []) @safe {
 				break;
 		}
 	}
-	song.order = phrases == null ? decompilePhrases(buffer[], header.songBase) : interpretPhrases(phrases, header.songBase);
-	decompileSong(buffer[], song);
-	debug(nspclogging) tracef("FIR coefficients: %s", song.firCoefficients);
+	song.loadNSPC(header, buffer[]);
 	return song;
 }
-private Phrase[] decompilePhrases(scope ubyte[] data, ushort startAddress) @safe {
+private Phrase[] decompilePhrases(scope const(ubyte)[] data, ushort startAddress) @safe {
 	// Get order length and repeat info (at this point, we don't know how
 	// many patterns there are, so the pattern pointers aren't validated yet)
-	const ushort[] wpO = cast(ushort[]) data[startAddress .. $ -  ($ - startAddress) % 2];
+	const ushort[] wpO = cast(const(ushort)[]) data[startAddress .. $ -  ($ - startAddress) % 2];
 	uint index;
 	uint phraseCount;
 	bool nextEnds;
@@ -466,7 +477,7 @@ private Phrase[] interpretPhrases(const scope ushort[] addresses, ushort startAd
 	}
 	return newPhrases;
 }
-private void decompileSong(scope ubyte[] data, ref Song song) @safe {
+private void decompileSong(scope const(ubyte)[] data, ref Song song) @safe {
 	immutable copyData = data.idup;
 
 	debug(nspclogging) tracef("Phrases: %(%s, %)", song.order);
@@ -629,3 +640,104 @@ const(Pack)[] parsePacks(const(ubyte)[] input) {
 	}
 	return result;
 }
+
+NSPCFileHeader detectParameters(scope const(ubyte)[] data, const(ubyte)[] dsp) @safe pure {
+	import std.algorithm.searching : find;
+	NSPCFileHeader header;
+	bool foundMusic = false;
+	if (data[0x400 .. 0x410].among(earlyAMK, laterAMK)) {
+		header.variant = nspcplay.Variant.addmusick;
+		const songTableAddress = data.find(amkPreTable)[amkPreTable.length .. $];
+		const tableAddr = (cast(const(ushort)[])(songTableAddress[0 .. 2]))[0] + 2 + 18;
+		header.songBase = (cast(const(ushort)[])data[tableAddr .. tableAddr + 2])[0];
+		header.instrumentBase = 0x1844;
+		const songStartData = data[header.songBase .. $];
+		ushort customInstrumentBase = 0;
+		while(songStartData[customInstrumentBase .. customInstrumentBase + 2] != [0xFF, 0x00]) {
+			customInstrumentBase += 2;
+		}
+		header.extra.customInstruments = cast(ushort)((cast(const(ushort)[])songStartData[customInstrumentBase + 2 .. customInstrumentBase  + 4])[0] + 6);
+	}
+	header.sampleBase = dsp[0x5D] << 8;
+
+	const(ushort)[] songTable;
+	ubyte trackPointerAddress;
+	for (ushort i = 0; i < 0xFF00; i++) {
+		if ((data[i .. i + 2] == [0xCF, 0xDA]) && (data[i + 3 .. i + 5] == [0x60, 0x98]) && (data[i + 7] == 0x98) && (data[i+2] == data[i + 6])) {
+			header.instrumentBase = data[i + 5] + (data[i + 8] << 8);
+		}
+		if ((data[i .. i + 3] == [0x1C, 0x5D, 0xF5]) && (data[i + 5 .. i + 7] == [0xFD, 0xF5]) && (data[i + 9] == 0xDA)) {
+			ubyte songID = 0;
+			foreach (songIDCandiate; only(data[0x00], data[0x04], data[0x08], data[0x0D], data[0xF3], data[0xF4])) {
+				if (songIDCandiate == 0) {
+					continue;
+				}
+				songID = songIDCandiate;
+				break;
+			}
+			trackPointerAddress = data[i + 10];
+			enforce(songID != 0, "Song ID not found");
+			const songTableOffset = data[i + 7] + (data[i + 8] << 8);
+			debug infof("Found song table at %04X, song ID %s", songTableOffset, songID);
+			songTable = (cast(const(ushort)[])data[songTableOffset .. songTableOffset + 512]);
+			header.songBase = songTable[songID];
+		}
+		if ((data[i .. i + 7] == [0x8D, 0x08, 0xCF, 0x5D, 0x8D, 0x0F, 0xF5])) {
+			debug infof("Found FIR coefficients at %04X", (cast(const(ushort)[])(data[i + 7 .. i + 9]))[0]);
+		}
+		if ((data[i .. i + 6] == [0x2D, 0x9F, 0x28, 0x07, 0xFD, 0xF6])) {
+			const offset = (cast(const(ushort)[])(data[i + 6 .. i + 8]))[0];
+			debug infof("Found release table at %04X", offset);
+			bool found;
+			foreach (idx, table; releaseTables) {
+				if (data[offset .. offset + table.length] == table) {
+					header.releaseTable = cast(ReleaseTable)idx;
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				debug infof("No release table match");
+			}
+		}
+		if ((data[i .. i + 5] == [0xAE, 0x28, 0x0F, 0xFD, 0xF6])) {
+			const offset = (cast(const(ushort)[])(data[i + 5 .. i + 7]))[0];
+			debug infof("Found volume table at %04X", offset);
+			bool found;
+			foreach (idx, table; volumeTables) {
+				if (data[offset .. offset + table.length] == table) {
+					header.volumeTable = cast(VolumeTable)idx;
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				debug infof("No volume table match");
+			}
+		}
+	}
+	if ((header.songBase == 0) && (songTable != null)) {
+		const currentSongPointer = (cast(const(ushort)[])(data[trackPointerAddress .. trackPointerAddress + 2]))[0];
+		ushort closest;
+		foreach (songTableEntry; songTable) {
+			if (songTableEntry > currentSongPointer) {
+				continue;
+			}
+			if (currentSongPointer - songTableEntry < currentSongPointer - closest) {
+				closest = songTableEntry;
+			}
+		}
+		debug tracef("Closest to %04X? %04X?", currentSongPointer, closest);
+		if (currentSongPointer - closest < 32) {
+			header.songBase = closest;
+		}
+	}
+	enforce(header.instrumentBase != 0, "Instrument table not found");
+	enforce(songTable != null && header.songBase != 0, "Song data and song table not found");
+	enforce(songTable == null && header.songBase != 0, "Song data not found");
+
+	return header;
+}
+enum amkPreTable = [0x8F, 0x02, 0x0C, 0xAE, 0x1C, 0xFD, 0xF6];
+enum earlyAMK = [0x20, 0xCD, 0xCF, 0xBD, 0xE8, 0x00, 0x8D, 0x00, 0xD6, 0x00, 0x01, 0xFE, 0xFB, 0xD6, 0x00, 0x02]; //pre-1.0.9
+enum laterAMK = [0x20, 0xCD, 0xCF, 0xBD, 0xE8, 0x00, 0xFD, 0xD6, 0x00, 0x01, 0xD6, 0x00, 0x02, 0xD6, 0x00, 0x03]; //1.0.9
