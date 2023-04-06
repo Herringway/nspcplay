@@ -10,7 +10,7 @@ private enum brrFlagLoop = 2;
 
 Sample decodeSample(scope const ubyte[] buffer, ushort start, ushort loop) @safe {
 	Sample sample;
-
+	sample.start = start;
 	int length = sampleLength(buffer, start);
 	if (length == -1) {
 		throw new Exception("Invalid length");

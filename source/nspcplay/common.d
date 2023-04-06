@@ -110,6 +110,7 @@ align(1) struct ADSRGain {
 	}
 }
 struct Sample {
+	ushort start;
 	short[] data;
 	int loopLength;
 	bool isValid() const @safe pure nothrow {
