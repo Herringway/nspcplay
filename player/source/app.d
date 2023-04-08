@@ -111,28 +111,7 @@ int main(string[] args) {
 	}
 	Song song;
 	if (filePath.extension == ".spc") {
-		const spc = file[0x100 .. 0x10100];
-		const dsp = file[0x10100 .. 0x10180];
-
-		const id666 = (cast(ID666Tags[])file[0x2E .. 0x100])[0];
-		void addTag(string tag, const char[] value) {
-			if (value != "") {
-				song.tags ~= TagPair(tag, value.idup);
-			}
-		}
-		addTag("title", id666.text.songTitle.fromStringz);
-		addTag("album", id666.text.gameTitle.fromStringz);
-		addTag("artist", id666.text.songArtist.fromStringz);
-		addTag("comment", id666.text.comments.fromStringz);
-		enum emulators = [1: "ZSNES", 2: "SNES9x"];
-		addTag("emulator", emulators.get(id666.text.emulator, ""));
-		auto header = detectParameters(spc[], dsp[]);
-		infof("Detected variant: %s", header.variant);
-		infof("Detected instruments: %04X", header.instrumentBase);
-		infof("Detected samples: %04X", header.sampleBase);
-		infof("Detected song: %04X", header.songBase);
-		infof("Detected release table: %s, volume table: %s", header.releaseTable, header.volumeTable);
-		song.loadNSPC(header, spc[]);
+		song = loadSPCFile(file);
 	} else {
 		song = loadNSPCFile(file, phrases);
 	}
