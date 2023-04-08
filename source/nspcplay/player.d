@@ -422,11 +422,11 @@ struct NSPCPlayer {
 		return buffer[0 .. length];
 	}
 
-	private void calcTotalVolume(const SongState st, ref ChannelState c, byte tremoloPhase) nothrow @safe pure {
+	private void calcTotalVolume(ref ChannelState c, byte tremoloPhase) nothrow @safe pure {
 		ubyte v = (tremoloPhase << 1 ^ tremoloPhase >> 7) & 0xFF;
 		v = ~(v * c.tremoloRange >> 8) & 0xFF;
 
-		v = v * (st.volume.current >> 8) >> 8;
+		v = v * (state.volume.current >> 8) >> 8;
 		v = v * currentSong.volumeTable[c.noteStyle & 15] >> 8;
 		v = v * (c.volume.current >> 8) >> 8;
 		c.totalVolume = v * v >> 8;
@@ -457,7 +457,7 @@ struct NSPCPlayer {
 		}
 	}
 
-	private void setInstrument(ref SongState st, ref ChannelState c, size_t instrument) nothrow pure @safe {
+	private void setInstrument(ref ChannelState c, size_t instrument) nothrow pure @safe {
 		const idata = currentSong.instruments[instrument];
 		c.instrument = cast(ubyte) instrument;
 		c.sampleID = currentSong.instruments[instrument].sampleID;
@@ -520,10 +520,10 @@ struct NSPCPlayer {
 		return disp; /*   \/ */
 	}
 	// do a Ex/Fx code
-	private void doCommand(ref SongState st, ref ChannelState c, const Command command) nothrow pure @safe {
+	private void doCommand(ref ChannelState c, const Command command) nothrow pure @safe {
 		final switch (command.special) {
 			case VCMD.instrument:
-				setInstrument(st, c, currentSong.absoluteInstrumentID(command.parameters[0], st.percussionBase, false));
+				setInstrument(c, currentSong.absoluteInstrumentID(command.parameters[0], state.percussionBase, false));
 				break;
 			case VCMD.panning:
 			case VCMD.konamiPanning: // ???
@@ -545,19 +545,19 @@ struct NSPCPlayer {
 				c.vibratoFadeIn = 0;
 				break;
 			case VCMD.songVolume:
-				st.volume.current = command.parameters[0] << 8;
+				state.volume.current = command.parameters[0] << 8;
 				break;
 			case VCMD.songVolumeFade:
-				makeSlider(st.volume, command.parameters[0], command.parameters[1]);
+				makeSlider(state.volume, command.parameters[0], command.parameters[1]);
 				break;
 			case VCMD.tempo:
-				st.tempo.current = command.parameters[0] << 8;
+				state.tempo.current = command.parameters[0] << 8;
 				break;
 			case VCMD.tempoFade:
-				makeSlider(st.tempo, command.parameters[0], command.parameters[1]);
+				makeSlider(state.tempo, command.parameters[0], command.parameters[1]);
 				break;
 			case VCMD.globalAbsoluteTransposition:
-				st.transpose = command.parameters[0];
+				state.transpose = command.parameters[0];
 				break;
 			case VCMD.channelAbsoluteTransposition:
 				c.transpose = command.parameters[0];
@@ -597,26 +597,26 @@ struct NSPCPlayer {
 				c.finetune = command.parameters[0];
 				break;
 			case VCMD.echoEnableBitsAndVolume:
-				foreach (idx, ref channel; st.channels) {
+				foreach (idx, ref channel; state.channels) {
 					channel.echoEnabled = !!(command.parameters[0] & (1 << idx));
 				}
-				st.echoVolumeLeft = command.parameters[1];
-				st.echoVolumeRight = command.parameters[2];
+				state.echoVolumeLeft = command.parameters[1];
+				state.echoVolumeRight = command.parameters[2];
 				break;
 			case VCMD.echoOff:
-				foreach (ref channel; st.channels) {
+				foreach (ref channel; state.channels) {
 					channel.echoEnabled = false;
 				}
 				break;
 			case VCMD.echoParameterSetup:
-				st.echoDelay = command.parameters[0];
-				st.echoFeedbackVolume = command.parameters[1];
-				st.firCoefficients = currentSong.firCoefficients[command.parameters[2]];
+				state.echoDelay = command.parameters[0];
+				state.echoFeedbackVolume = command.parameters[1];
+				state.firCoefficients = currentSong.firCoefficients[command.parameters[2]];
 				break;
 			case VCMD.echoVolumeFade:
-				st.fadeTicks = command.parameters[0];
-				st.targetEchoVolumeLeft = command.parameters[1];
-				st.targetEchoVolumeRight = command.parameters[2];
+				state.fadeTicks = command.parameters[0];
+				state.targetEchoVolumeLeft = command.parameters[1];
+				state.targetEchoVolumeRight = command.parameters[2];
 				break;
 			case VCMD.noop0: //do nothing
 			case VCMD.noop1: //do nothing
@@ -628,7 +628,7 @@ struct NSPCPlayer {
 				break;
 			case VCMD.pitchSlideToNote:
 				c.currentPortStartCounter = command.parameters[0];
-				int target = command.parameters[2] + st.transpose;
+				int target = command.parameters[2] + state.transpose;
 				if (target >= 0x100) {
 					target -= 0xFF;
 				}
@@ -636,7 +636,7 @@ struct NSPCPlayer {
 				makeSlider(c.note, command.parameters[1], target & 0x7F);
 				break;
 			case VCMD.percussionBaseInstrumentRedefine:
-				st.percussionBase = command.parameters[0];
+				state.percussionBase = command.parameters[0];
 				break;
 			case VCMD.konamiADSRGain:
 				setADSRGain(c, konamiADSRGain(command.parameters));
@@ -645,11 +645,11 @@ struct NSPCPlayer {
 				setADSRGain(c, amkADSRGain(command.parameters));
 				break;
 			case VCMD.amkSetFIR:
-				st.firCoefficients = command.parameters;
+				state.firCoefficients = command.parameters;
 				break;
 			case VCMD.amkSampleLoad:
 				c.sampleID = command.parameters[0];
-				ubyte finetune = st.amkFixSampleLoadTuning ? 0 : cast(ubyte)currentSong.instruments[c.instrument].tuning;
+				ubyte finetune = state.amkFixSampleLoadTuning ? 0 : cast(ubyte)currentSong.instruments[c.instrument].tuning;
 				c.tuningOverride = (cast(ushort)command.parameters[1] << 8) | finetune;
 				break;
 			case VCMD.amkF4:
@@ -658,7 +658,7 @@ struct NSPCPlayer {
 					break;
 				}
 				if (command.parameters[0] == 9) {
-					setInstrument(st, c, c.instrument);
+					setInstrument(c, c.instrument);
 					break;
 				}
 				debug(nspclogging) warningf("Unhandled command: %x", command);
@@ -684,7 +684,7 @@ struct NSPCPlayer {
 					break;
 				}
 				if (command.parameters[0] == 6) {
-					st.useAltRTable = !!command.parameters[1];
+					state.useAltRTable = !!command.parameters[1];
 					break;
 				}
 				debug(nspclogging) warningf("Unhandled command: %x", command);
@@ -720,12 +720,12 @@ struct NSPCPlayer {
 	}
 
 	// $0654 + $08D4-$8EF
-	private void doNote(ref SongState st, ref ChannelState c, const Command command) nothrow pure @safe {
+	private void doNote(ref ChannelState c, const Command command) nothrow pure @safe {
 		ubyte note = command.note;
-		executeRemote(255, c, st);
+		executeRemote(255, c);
 		// using >=CA as a note switches to that instrument and plays a predefined note
 		if (command.type == VCMDClass.percussion) {
-			setInstrument(st, c, currentSong.absoluteInstrumentID(note, st.percussionBase, true));
+			setInstrument(c, currentSong.absoluteInstrumentID(note, state.percussionBase, true));
 			note = cast(ubyte)(currentSong.percussionNotes[note]);
 		}
 		if (command.type.among(VCMDClass.percussion, VCMDClass.note)) {
@@ -740,7 +740,7 @@ struct NSPCPlayer {
 			c.gain = 0;
 			c.setADSRPhase((currentSong.instruments[c.instrument].adsrGain.mode == ADSRGainMode.adsr) ? ADSRPhase.attack : ADSRPhase.gain);
 
-			note += st.transpose + c.transpose + c.semitoneTune;
+			note += state.transpose + c.transpose + c.semitoneTune;
 			c.note.current = cast(ushort)(note << 8 | c.finetune);
 
 			c.note.cycles = c.portLength;
@@ -766,7 +766,7 @@ struct NSPCPlayer {
 			auto p = c.parser;
 			bool done;
 			while (!done && !p.empty) {
-				const tmpCommand = p.popCommand(*currentSong, done, st.enchantedReadahead);
+				const tmpCommand = p.popCommand(*currentSong, done, state.enchantedReadahead);
 				if (tmpCommand.type.among(VCMDClass.note, VCMDClass.tie, VCMDClass.rest, VCMDClass.percussion)) {
 					nextNote = tmpCommand.type;
 					break;
@@ -779,7 +779,7 @@ struct NSPCPlayer {
 			// if the note will be continued, don't release yet
 			rel = c.noteLength;
 		} else {
-			const releaseTable = st.useAltRTable ? currentSong.altReleaseTable : currentSong.releaseTable;
+			const releaseTable = state.useAltRTable ? currentSong.altReleaseTable : currentSong.releaseTable;
 			rel = (c.noteLength * c.releaseOverride.get(releaseTable[c.noteStyle >> 4])) >> 8;
 			if (rel > c.noteLength - 2) {
 				rel = c.noteLength - 2;
@@ -853,7 +853,7 @@ struct NSPCPlayer {
 		}
 		if (!c.noteRelease) {
 			c.setADSRPhase(ADSRPhase.release);
-			executeRemote(3, c, state);
+			executeRemote(3, c);
 		}
 
 		// sweep
@@ -889,29 +889,29 @@ struct NSPCPlayer {
 		}
 	}
 	bool inRemote = false;
-	private void executeRemote(ubyte event, ref ChannelState channel, ref SongState song) nothrow pure @safe {
+	private void executeRemote(ubyte event, ref ChannelState channel) nothrow pure @safe {
 		assert(!inRemote);
 		if (auto seq = event in channel.remotes) {
 			inRemote = true;
 			Parser parser;
 			parser.sequenceData = currentSong.tracks[*seq];
 			parser.subroutineCount = 0;
-			execute(parser, channel, song);
+			execute(parser, channel);
 			inRemote = false;
 		}
 	}
 	/// Executes vcmds until either a terminator or a note is reached
-	private bool execute(ref Parser parser, ref ChannelState channel, ref SongState song) nothrow pure @safe {
+	private bool execute(ref Parser parser, ref ChannelState channel) nothrow pure @safe {
 		while (!parser.empty) {
 			bool done;
 			const command = parser.popCommand(*currentSong, done);
-			if (executeCommand(channel, song, command, done)) {
+			if (executeCommand(channel, command, done)) {
 				return done;
 			}
 		}
 		return true;
 	}
-	private bool executeCommand(ref ChannelState channel, ref SongState song, const Command command, ref bool done) nothrow pure @safe {
+	private bool executeCommand(ref ChannelState channel, const Command command, ref bool done) nothrow pure @safe {
 		final switch (command.type) {
 			case VCMDClass.terminator:
 				if (done) {
@@ -930,27 +930,27 @@ struct NSPCPlayer {
 			case VCMDClass.rest:
 			case VCMDClass.percussion:
 				channel.next = channel.noteLength - 1;
-				doNote(song, channel, command);
+				doNote(channel, command);
 				done = true;
 				return true;
 			case VCMDClass.special:
-				doCommand(song, channel, command);
+				doCommand(channel, command);
 				break;
 		}
 		return false;
 	}
 	public void executeCommand(ubyte channel, const Command command) nothrow pure @safe {
 		bool _;
-		executeCommand(state.channels[channel], state, command, _);
+		executeCommand(state.channels[channel], command, _);
 	}
 
 	// $07F9 + $0625
-	private bool doCycle(ref SongState st) nothrow pure @safe {
-		foreach (ref channel; st.channels) {
+	private bool doCycle() nothrow pure @safe {
+		foreach (ref channel; state.channels) {
 			if (--channel.next >= 0) {
 				doKeySweepVibratoChecks(channel);
 			} else {
-				if (!execute(channel.parser, channel, st)) {
+				if (!execute(channel.parser, channel)) {
 					return false;
 				}
 			}
@@ -960,17 +960,17 @@ struct NSPCPlayer {
 				if (!channel.parser.empty) {
 					const command = channel.parser.sequenceData.data[0];
 					if (command.special == VCMD.pitchSlideToNote) {
-						doCommand(st, channel, command);
+						doCommand(channel, command);
 						channel.parser.popCommand(*currentSong);
 					}
 				}
 			}
 		}
 
-		st.tempo.slide();
-		st.volume.slide();
+		state.tempo.slide();
+		state.volume.slide();
 
-		foreach (ref channel; st.channels) {
+		foreach (ref channel; state.channels) {
 			if (channel.parser.sequenceData == Track.init) {
 				continue;
 			}
@@ -992,7 +992,7 @@ struct NSPCPlayer {
 					channel.tremoloStartCounter++;
 				}
 			}
-			calcTotalVolume(st, channel, cast(byte) tphase);
+			calcTotalVolume(channel, cast(byte) tphase);
 
 			// 0C79
 			channel.panning.slide();
@@ -1003,16 +1003,16 @@ struct NSPCPlayer {
 		return true;
 	}
 
-	private int subCycleCalc(const SongState st, int delta) nothrow pure @safe {
+	private int subCycleCalc(int delta) nothrow pure @safe {
 		if (delta < 0x8000) {
-			return st.cycleTimer * delta >> 8;
+			return state.cycleTimer * delta >> 8;
 		} else {
-			return -(st.cycleTimer * (0x10000 - delta) >> 8);
+			return -(state.cycleTimer * (0x10000 - delta) >> 8);
 		}
 	}
 
-	private void doSubCycle(ref SongState st) nothrow pure @safe {
-		foreach (ref channel; st.channels) {
+	private void doSubCycle() nothrow pure @safe {
+		foreach (ref channel; state.channels) {
 			if (channel.parser.sequenceData == Track.init) {
 				continue;
 			}
@@ -1020,13 +1020,13 @@ struct NSPCPlayer {
 
 			bool changed = false;
 			if (channel.tremoloRange && channel.tremoloStartCounter == channel.tremoloStart) {
-				int p = channel.tremoloPhase + subCycleCalc(st, channel.tremoloSpeed);
+				int p = channel.tremoloPhase + subCycleCalc(channel.tremoloSpeed);
 				changed = true;
-				calcTotalVolume(st, channel, cast(byte) p);
+				calcTotalVolume(channel, cast(byte) p);
 			}
 			int pan = channel.panning.current;
 			if (channel.panning.cycles) {
-				pan += subCycleCalc(st, channel.panning.delta);
+				pan += subCycleCalc(channel.panning.delta);
 				changed = true;
 			}
 			if (changed) {
@@ -1036,11 +1036,11 @@ struct NSPCPlayer {
 			changed = false;
 			int note = channel.note.current; // $0BBC
 			if (channel.note.cycles && channel.currentPortStartCounter == 0) {
-				note += subCycleCalc(st, channel.note.delta);
+				note += subCycleCalc(channel.note.delta);
 				changed = true;
 			}
 			if (channel.currentVibratoRange && channel.vibratoStartCounter == channel.vibratoStart) {
-				int p = channel.vibratoPhase + subCycleCalc(st, channel.vibratoSpeed);
+				int p = channel.vibratoPhase + subCycleCalc(channel.vibratoSpeed);
 				note += calcVibratoDisp(channel, p);
 				changed = true;
 			}
@@ -1054,7 +1054,7 @@ struct NSPCPlayer {
 		state.cycleTimer += state.tempo.current >> 8;
 		if (state.cycleTimer >= 256) {
 			state.cycleTimer -= 256;
-			while (!doCycle(state)) {
+			while (!doCycle()) {
 				loadPattern();
 				if (!songPlaying) {
 					return false;
@@ -1069,7 +1069,7 @@ struct NSPCPlayer {
 				}
 			}
 		} else {
-			doSubCycle(state);
+			doSubCycle();
 		}
 		return true;
 	}
