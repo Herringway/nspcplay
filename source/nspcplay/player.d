@@ -330,6 +330,12 @@ void doEcho(ref SongState state, ref short leftSample, ref short rightSample, in
 	}
 }
 
+version(purePlayer) {
+	alias Callback = void function(scope NSPCPlayer*) @safe pure nothrow;
+} else {
+	alias Callback = void function(scope NSPCPlayer*) @safe nothrow;
+}
+
 ///
 struct NSPCPlayer {
 	enum defaultSpeed = 500;
@@ -346,10 +352,10 @@ struct NSPCPlayer {
 	Interpolation interpolation = Interpolation.gaussian;
 
 	size_t onTimerTicksLeft;
-	void function(scope NSPCPlayer*) @safe pure nothrow onTimerTick;
-	void function(scope NSPCPlayer*) @safe pure nothrow onPhraseChange;
+	Callback onTimerTick;
+	Callback onPhraseChange;
 	///
-	short[2][] fillBuffer(short[2][] buffer) nothrow pure @safe {
+	short[2][] fillBuffer()(short[2][] buffer) {
 		enum left = 0;
 		enum right = 1;
 		if (!songPlaying) {
@@ -791,7 +797,7 @@ struct NSPCPlayer {
 		c.noteRelease = cast(ubyte) rel;
 	}
 
-	private void loadPattern() nothrow pure @safe {
+	private void loadPattern()() {
 		state.phraseCounter++;
 		const nextPhrase = currentSong.order[state.phraseCounter];
 		debug(nspclogging) tracef("Next phrase: %s", nextPhrase);
@@ -1050,7 +1056,7 @@ struct NSPCPlayer {
 		}
 	}
 
-	private bool doTimer() nothrow pure @safe {
+	private bool doTimer()() {
 		state.cycleTimer += state.tempo.current >> 8;
 		if (state.cycleTimer >= 256) {
 			state.cycleTimer -= 256;
@@ -1075,7 +1081,7 @@ struct NSPCPlayer {
 	}
 
 	/// Initialize or reset the player state
-	void initialize() nothrow pure @safe {
+	void initialize()() {
 		state = state.init;
 
 		if (currentSong) {
@@ -1104,7 +1110,7 @@ struct NSPCPlayer {
 	void stop() @safe pure nothrow {
 		songPlaying = false;
 	}
-	void loadSong(const Song song) @safe pure nothrow {
+	void loadSong()(const Song song) {
 		if (songPlaying) {
 			stop();
 		}
@@ -1183,6 +1189,14 @@ struct NSPCPlayer {
 	}
 	auto phraseCounter() const @safe pure nothrow {
 		return state.phraseCounter;
+	}
+}
+
+version(purePlayer) {
+	@safe pure unittest {
+		NSPCPlayer p;
+		scope buf = new short[2][](20);
+		p.fillBuffer(buf);
 	}
 }
 
