@@ -70,6 +70,11 @@ enum ADSRPhase {
 	release
 }
 
+enum SeekStyle {
+	absolute,
+	relative,
+}
+
 private struct ChannelState {
 	bool enabled = true;
 	int next; // time left in note
@@ -1109,6 +1114,14 @@ struct NSPCPlayer {
 	}
 	void stop() @safe pure nothrow {
 		songPlaying = false;
+	}
+	void seek()(size_t ticks, SeekStyle style) {
+		if (style == SeekStyle.absolute) {
+			initialize();
+		}
+		while (ticks-- > 0) {
+			doTimer();
+		}
 	}
 	void loadSong()(const Song song) {
 		if (songPlaying) {
