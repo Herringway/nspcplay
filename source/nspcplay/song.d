@@ -87,8 +87,8 @@ struct Track {
 }
 
 struct Song {
-	ushort address;
-	const(Phrase)[] order;
+	private NSPCFileHeader header;
+	Phrase[] order;
 	ushort[8][ushort] trackLists;
 	Track[ushort] tracks;
 	const(ubyte[8])[] firCoefficients = defaultFIRCoefficients;
@@ -144,6 +144,7 @@ struct Song {
 	}
 	void loadNSPC(const NSPCFileHeader header, scope const ubyte[] data, ushort[] phrases = []) @safe {
 		debug(nspclogging) tracef("Loading NSPC - so: %X, i: %X, sa: %X, variant: %s", header.songBase, header.instrumentBase, header.sampleBase, header.variant);
+		this.header = header;
 		variant = header.variant;
 		assert(header.volumeTable < volumeTables.length, "Invalid volume table");
 		assert(header.releaseTable < releaseTables.length, "Invalid release table");
