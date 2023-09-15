@@ -357,6 +357,7 @@ struct NSPCPlayer {
 	Interpolation interpolation = Interpolation.gaussian;
 
 	size_t onTimerTicksLeft;
+	bool repeatTimer;
 	Callback onTimerTick;
 	Callback onPhraseChange;
 	///
@@ -1071,12 +1072,14 @@ struct NSPCPlayer {
 					return false;
 				}
 			}
-			if (onTimerTicksLeft > 0) {
+			if (repeatTimer || onTimerTicksLeft > 0) {
 				onTimerTicksLeft--;
 			} else {
 				if (onTimerTick !is null) {
 					onTimerTick(&this);
-					onTimerTick = null;
+					if (!repeatTimer) {
+						onTimerTick = null;
+					}
 				}
 			}
 		} else {
@@ -1198,6 +1201,11 @@ struct NSPCPlayer {
 	}
 	public void addTimer(size_t ticks, typeof(onTimerTick) func) @safe nothrow pure {
 		onTimerTicksLeft = ticks;
+		onTimerTick = func;
+	}
+	public void addTimer(typeof(onTimerTick) func) @safe nothrow pure {
+		onTimerTicksLeft = 0;
+		repeatTimer = true;
 		onTimerTick = func;
 	}
 	auto phraseCounter() const @safe pure nothrow {
