@@ -1211,6 +1211,12 @@ struct NSPCPlayer {
 	auto phraseCounter() const @safe pure nothrow {
 		return state.phraseCounter;
 	}
+	void stopChannel(size_t channel) @safe pure nothrow {
+		state.channels[channel].noteRelease = 0;
+	}
+	bool isChannelPlaying(size_t channel) @safe pure nothrow {
+		return state.channels[channel].samplePosition != -1;
+	}
 }
 
 version(purePlayer) {
