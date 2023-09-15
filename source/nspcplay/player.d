@@ -361,7 +361,7 @@ struct NSPCPlayer {
 	Callback onTimerTick;
 	Callback onPhraseChange;
 	///
-	short[2][] fillBuffer()(short[2][] buffer) {
+	short[2][] fillBuffer()(scope short[2][] buffer) {
 		enum left = 0;
 		enum right = 1;
 		if (!songPlaying) {
