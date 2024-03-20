@@ -34,7 +34,7 @@ bool initAudio(SDL_AudioCallback fun, ubyte channels, uint sampleRate, void* use
 	}
 	SDL_AudioSpec want, have;
 	want.freq = sampleRate;
-	want.format = SDL_AudioFormat.AUDIO_S16;
+	want.format = AUDIO_S16;
 	want.channels = channels;
 	want.samples = 512;
 	want.callback = fun;

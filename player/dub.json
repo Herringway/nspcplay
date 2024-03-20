@@ -5,6 +5,7 @@
 	"targetType": "executable",
 	"dependencies": {
 		"nspcplay": "*",
-		"bindbc-sdl": "~>1.0.0"
-	}
+		"bindbc-sdl": "~>1.4"
+	},
+	"versions": ["SDL_208"]
 }
