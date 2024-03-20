@@ -184,8 +184,11 @@ DetectionResult detectParameters(scope const(ubyte)[] data, scope const(ubyte)[]
 	result.header.sampleBase = dsp[0x5D] << 8;
 	if (data[0x400 .. 0x410].among(earlyAMK, laterAMK)) {
 		result.header.variant = nspcplay.Variant.addmusick;
-		const songTableAddress = data.find(amkPreTable)[amkPreTable.length .. $];
-		const tableAddr = (cast(const(ushort)[])(songTableAddress[0 .. 2]))[0] + 2 + 18;
+		auto foundPreTable = data;
+		if (!findSkip(foundPreTable, amkPreTable)) {
+			enforce(findSkip(foundPreTable, amkPreTable109), "AMK detected, but song table location failed!");
+		}
+		const tableAddr = (cast(const(ushort)[])(foundPreTable[0 .. 2]))[0] + 2 + 18;
 		result.header.songBase = (cast(const(ushort)[])data[tableAddr .. tableAddr + 2])[0];
 		result.header.instrumentBase = 0x1844;
 		const songStartData = data[result.header.songBase .. $];
@@ -308,7 +311,17 @@ DetectionResult detectParameters(scope const(ubyte)[] data, scope const(ubyte)[]
 	return result;
 }
 enum fzeroStart = [0x20, 0xCD, 0xCF, 0xBD, 0xE8, 0x00, 0x5D, 0xAF, 0xC8, 0xE8, 0xD0, 0xFB, 0xBC, 0x3F, 0x3D, 0x0E]; // start of f-zero's program
+// MOV $0C, #$02
+// POP A
+// ASL A
+// MOV Y, A
+// MOV A, <addr - 2> + Y
 enum amkPreTable = [0x8F, 0x02, 0x0C, 0xAE, 0x1C, 0xFD, 0xF6];
+// MOV $0C, #$02
+// ASL A
+// MOV Y, A
+// MOV A, <addr - 2> + Y
+enum amkPreTable109 = [0x8F, 0x02, 0x0C, 0x1C, 0xFD, 0xF6];
 enum earlyAMK = [0x20, 0xCD, 0xCF, 0xBD, 0xE8, 0x00, 0x8D, 0x00, 0xD6, 0x00, 0x01, 0xFE, 0xFB, 0xD6, 0x00, 0x02]; //pre-1.0.9
 enum laterAMK = [0x20, 0xCD, 0xCF, 0xBD, 0xE8, 0x00, 0xFD, 0xD6, 0x00, 0x01, 0xD6, 0x00, 0x02, 0xD6, 0x00, 0x03]; //1.0.9
 enum ExID666IDs {
