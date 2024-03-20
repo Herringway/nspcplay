@@ -380,6 +380,9 @@ struct NSPCPlayer {
 			length++;
 			int[2] tempSample;
 			foreach (i, ref channel; state.channels) {
+				if (channel.sampleID >= 128) {
+					continue; //NYI
+				}
 				const loadedSample = currentSong.samples[channel.sampleID];
 				if (!channel.enabled) {
 					continue;
