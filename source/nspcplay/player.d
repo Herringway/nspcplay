@@ -345,8 +345,8 @@ version(purePlayer) {
 struct NSPCPlayer {
 	enum defaultSpeed = 500;
 
-	package const(Song)* currentSong;
-	private SongState state;
+	const(Song)* currentSong;
+	SongState state;
 	private SongState backupState;
 	private int _mixrate = nativeSamplingRate;
 	private int timerSpeed = defaultSpeed;
