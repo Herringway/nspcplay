@@ -67,7 +67,7 @@ Sample decodeSample(scope const ubyte[] buffer, ushort start, ushort loop) @safe
 	return sample;
 }
 
-void decodeBRRBlock(scope short[] buffer, short[2] lastSamples, const scope ubyte[] block) nothrow @safe {
+void decodeBRRBlock(scope short[] buffer, short[2] lastSamples, const scope ubyte[] block) nothrow @safe pure {
 	int range = block[0] >> 4;
 	int filter = (block[0] >> 2) & 3;
 
@@ -88,16 +88,15 @@ void decodeBRRBlock(scope short[] buffer, short[2] lastSamples, const scope ubyt
 		if (range > 12) {
 			s = (s < 0) ? -(1 << 11) : 0;
 		}
-
 		switch (filter) {
-			case 1:
-				s += (cast(int) lastSamples[1] * 15) >> 5;
+			case 1: // + lastSamples[1] * 0.46875
+				s += (lastSamples[1] >> 1) + ((-lastSamples[1]) >> 5);
 				break;
-			case 2:
-				s += ((cast(int) lastSamples[1] * 61) >> 6) - ((cast(int) lastSamples[0] * 15) >> 5);
+			case 2: // + lastSamples[1] * 0.953125 - lastSamples[0] * 0.46875
+				s += lastSamples[1] - (lastSamples[0] >> 1) + (lastSamples[0] >> 5) + ((lastSamples[1] * -3) >> 6);
 				break;
-			case 3:
-				s += ((cast(int) lastSamples[1] * 115) >> 7) - ((cast(int) lastSamples[0] * 13) >> 5);
+			case 3:// + lastSamples[1] * 0.8984375 - lastSamples[0] * 0.40625
+				s += lastSamples[1] - (lastSamples[0] >> 1) + ((lastSamples[1] * -13) >> 7) + (((lastSamples[0] >> 1) * 3) >> 4);
 				break;
 			default:
 				break;
@@ -114,6 +113,28 @@ void decodeBRRBlock(scope short[] buffer, short[2] lastSamples, const scope ubyt
 		lastSamples[1] = cast(short) s;
 		buffer[i] = cast(short) s;
 	}
+}
+
+@safe pure unittest {
+	import core.exception : AssertError;
+	import std.stdio : writefln;
+	void assertBlock(scope const ubyte[] input, short[16] output, short[2] prev = [0, 0], string file = __FILE__, size_t line = __LINE__) {
+		short[16] buffer;
+		decodeBRRBlock(buffer, prev, input);
+		if(buffer != output) {
+			debug writefln!"%(%04X %)"(buffer[]);
+			debug writefln!"%(%04X %)"(output[]);
+			throw new AssertError("Test failed", file, line);
+		}
+	}
+	// filter 0
+	assertBlock([0xC2, 0x2C, 0x1E, 0xB3, 0x40, 0xEF, 0x10, 0x41, 0xE0], [0x2000, -0x4000, 0x1000, -0x2000, -0x5000, 0x3000, 0x4000, 0x0000, -0x2000, -0x1000, 0x1000, 0x0000, 0x4000, 0x1000, -0x2000, 0x0000]);
+	// filter 1
+	assertBlock([0xB6, 0x32, 0x11, 0x10, 0xDB, 0xDC, 0xC0, 0x11, 0x35], [0x19C6, 0x2828, 0x2DA4, 0x32C8, 0x379A, 0x3420, 0x18DE, cast(short)0xEF50, cast(short)0xD85A, cast(short)0xBAD4, cast(short)0x9F26, cast(short)0xA532, cast(short)0xB2DE, cast(short)0xBFB0, cast(short)0xDBB4, 0x05F8], [0x00EA, 0x01E6]);
+	// filter 2
+	assertBlock([0xAA, 0x4D, 0xA0, 0x10, 0x00, 0x00, 0x01, 0xF0, 0x01], [0x10AC, 0x131E, -0x332, cast(short)0xE7FA, cast(short)0xD932, cast(short)0xCC8A, cast(short)0xC246, cast(short)0xBA92, cast(short)0xB584, cast(short)0xB318, cast(short)0xB338, cast(short)0xB9BA, cast(short)0xBE04, cast(short)0xC416, cast(short)0xCBA4, cast(short)0xD85A], [0x00B0, 0x00B2]);
+	// filter 3
+	assertBlock([0x9E, 0x2B, 0xC3, 0xF0, 0x48, 0x43, 0xA6, 0x2F, 0x03], [0x0400, cast(short)0xFD30, cast(short)0xEFB2, cast(short)0xEAFA, cast(short)0xE576, cast(short)0xE164, cast(short)0xE68E, cast(short)0xDB24, cast(short)0xDA70, cast(short)0xE072, cast(short)0xD9D0, cast(short)0xE102, cast(short)0xEB54, cast(short)0xF208, cast(short)0xF7B0, 0x0268]);
 }
 
 private int sampleLength(const scope ubyte[] spcMemory, ushort start) nothrow @safe {
