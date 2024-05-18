@@ -39,7 +39,7 @@ Sample decodeSample(scope const ubyte[] buffer, ushort start, ushort loop) @safe
 		needsAnotherLoop = false;
 		for (int pos = decodingStart; pos < end; pos += brrBlockSize) {
 			enforce!NSPCException((idx + 1) * 16 <= p.length, "Invalid sample");
-			decodeBRRBlock(p[idx * 16 .. (idx + 1) * 16], pExtra, buffer[pos .. pos + brrBlockSize]);
+			decodeBRRBlock(p[idx * 16 .. (idx + 1) * 16], pExtra, buffer[pos .. pos + brrBlockSize][0 .. brrBlockSize]);
 			pExtra[] = p[idx * 16 + 14 .. idx * 16 + 16];
 			idx++;
 		}
@@ -49,7 +49,7 @@ Sample decodeSample(scope const ubyte[] buffer, ushort start, ushort loop) @safe
 
 			short[16] afterLoop;
 
-			decodeBRRBlock(afterLoop, pExtra, buffer[loop .. loop + brrBlockSize]);
+			decodeBRRBlock(afterLoop, pExtra, buffer[loop .. loop + brrBlockSize][0 .. brrBlockSize]);
 			int fullLoopLength = getFullLoopLength(sample, afterLoop[0 .. 2], (loop - start) / brrBlockSize * 16);
 
 			if (fullLoopLength == -1) {
@@ -67,7 +67,13 @@ Sample decodeSample(scope const ubyte[] buffer, ushort start, ushort loop) @safe
 	return sample;
 }
 
-void decodeBRRBlock(scope short[] buffer, short[2] lastSamples, const scope ubyte[] block) nothrow @safe pure {
+unittest {
+	const sample = decodeSample(cast(immutable(ubyte)[])import("wilhelm.brr"), 0, 0);
+	assert(sample.start == 0);
+	assert(sample.data.length == 12032);
+}
+
+void decodeBRRBlock(scope short[] buffer, short[2] lastSamples, const ubyte[brrBlockSize] block) nothrow @safe pure {
 	int range = block[0] >> 4;
 	int filter = (block[0] >> 2) & 3;
 
@@ -118,7 +124,7 @@ void decodeBRRBlock(scope short[] buffer, short[2] lastSamples, const scope ubyt
 @safe pure unittest {
 	import core.exception : AssertError;
 	import std.stdio : writefln;
-	void assertBlock(scope const ubyte[] input, short[16] output, short[2] prev = [0, 0], string file = __FILE__, size_t line = __LINE__) {
+	void assertBlock(scope const ubyte[brrBlockSize] input, short[16] output, short[2] prev = [0, 0], string file = __FILE__, size_t line = __LINE__) {
 		short[16] buffer;
 		decodeBRRBlock(buffer, prev, input);
 		if(buffer != output) {
