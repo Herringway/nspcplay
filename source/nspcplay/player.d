@@ -378,7 +378,7 @@ struct NSPCPlayer {
 				}
 			}
 			length++;
-			int[2] tempSample;
+			double[2] tempSample = 0.0;
 			foreach (i, ref channel; state.channels) {
 				if (channel.sampleID >= 128) {
 					continue; //NYI
@@ -392,10 +392,8 @@ struct NSPCPlayer {
 					continue;
 				}
 
-				int ipos = channel.samplePosition >> 15;
-
 				foreach (idx, ref interpolationSample; channel.interpolationBuffer) {
-					size_t offset = ipos + idx;
+					size_t offset = (channel.samplePosition >> 15) + idx;
 					while (loadedSample.loopLength && (offset >= loadedSample.data.length)) {
 						offset -= loadedSample.loopLength;
 					}
@@ -406,7 +404,7 @@ struct NSPCPlayer {
 					} else { //no sample data?
 					}
 				}
-				int s1 = channel.lastSample = interpolate(interpolation, channel.interpolationBuffer[], channel.samplePosition >> 3);
+				channel.lastSample = interpolate(interpolation, channel.interpolationBuffer[], channel.samplePosition >> 3);
 
 				if (channel.adsrRate && (++channel.adsrCounter >= cast(int)(adsrGainRates[channel.adsrRate] * (mixrate / cast(double)nativeSamplingRate)))) {
 					doADSR(channel);
@@ -415,10 +413,10 @@ struct NSPCPlayer {
 				if (channel.gain == 0) {
 					continue;
 				}
-				s1 = (s1 * channel.gain) >> 11;
+				int s1 = (channel.lastSample * channel.gain) >> 11;
 
-				tempSample[left] += cast(int)(s1 * channel.leftVolume / 128.0);
-				tempSample[right] += cast(int)(s1 * channel.rightVolume / 128.0);
+				tempSample[left] += s1 * channel.leftVolume / 128.0;
+				tempSample[right] += s1 * channel.rightVolume / 128.0;
 
 				channel.samplePosition += channel.noteFrequency;
 				if ((channel.samplePosition >> 15) >= loadedSample.data.length) {
