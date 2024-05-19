@@ -805,7 +805,7 @@ struct NSPCPlayer {
 	}
 
 	private void loadPattern()() {
-		state.phraseCounter = (state.phraseCounter + 1) % currentSong.order.length;
+		state.phraseCounter = cast(uint)((state.phraseCounter + 1) % currentSong.order.length);
 		const nextPhrase = currentSong.order[state.phraseCounter];
 		debug(nspclogging) tracef("Next phrase: %s", nextPhrase);
 		final switch (nextPhrase.type) {
