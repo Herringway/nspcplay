@@ -114,9 +114,9 @@ align(1) struct ADSRGain {
 	}
 }
 struct Sample {
-	ushort start;
-	short[] data;
-	int loopLength;
+	ushort start; /// starting address
+	short[] data; /// decoded signed 16-bit PCM data
+	int loopLength; /// Number of samples in loop
 	bool isValid() const @safe pure nothrow {
 		return data.length > 0;
 	}
