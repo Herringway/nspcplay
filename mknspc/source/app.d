@@ -11,7 +11,7 @@ int main(string[] args) {
 	(cast()sharedLog).logLevel = LogLevel.trace;
 	enum validArgs = ["spc", "packs"];
 	if (args.length == 1) {
-		stderr.writefln!"Missing argument - valid options are %-('%s', %)"(validArgs);
+		stderr.writefln!"Missing argument - valid options are %-('%s'%|, %)"(validArgs);
 		return 1;
 	}
 	NSPCWriter finished;
