@@ -88,7 +88,7 @@ NSPCWriter buildNSPCFromSPC(string[] args, out string filename) {
 	}
 	auto spcFile = cast(ubyte[])read(args[1]);
 	if (autodetect) {
-		writer.header = detectParameters(spcFile[0x100 .. 0x10100], spcFile[0x10100 .. 0x10180]);
+		writer.header = detectParameters(spcFile[0x100 .. 0x10100], spcFile[0x10100 .. 0x10180]).header;
 		infof("Detected parameters: Variant: %s, Song: %04X, Instruments: %04X, Samples: %04X", writer.header.variant, writer.header.songBase, writer.header.instrumentBase, writer.header.sampleBase);
 	}
 	const id666 = (cast(ID666Tags[])spcFile[0x2E .. 0x100])[0];
